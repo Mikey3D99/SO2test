@@ -1,0 +1,3 @@
+cd ~/windows-c/Users/wlodi/CLionProjects/SO2
+gcc main.c -o SO2
+./SO2
