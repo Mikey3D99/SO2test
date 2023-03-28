@@ -4,5 +4,14 @@
 
 #ifndef SO2_PLAYER_H
 #define SO2_PLAYER_H
+#include "../server/server.h"
+#include "ncurses.h"
+#include "../constants/constants.h"
 
+
+void draw_map();
+Player* create_player(int id);
+Player* add_player(Player* last_player, int id);
+void play_game(Player* current_player, int num_rounds);
+void run_client();
 #endif //SO2_PLAYER_H

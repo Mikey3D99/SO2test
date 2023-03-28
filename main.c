@@ -1,22 +1,22 @@
 #include <ncurses.h>
-#include "client/constants/constants.h"
+#include "client/server/server.h"
+#include "client/player/player.h"
 
+int main(int argc, char *argv[]){
 
-int main()
-{
-    // Initialize ncurses
-    initscr();
-    cbreak();
-    noecho();
-    curs_set(0);
-    load_map("/mnt/c/Users/wlodi/CLionProjects/SO2/mapEmpty.txt");
-    draw_map();
+    if (argc != 2) {
+        printf("Usage: %s [server|client]\n", argv[0]);
+        return 1;
+    }
 
-    // Refresh screen and wait for key press
-    refresh();
-    getch();
+    if (strcmp(argv[1], "server") == 0) {
+        run_server();
+    } else if (strcmp(argv[1], "client") == 0) {
+        run_client();
+    } else {
+        printf("Invalid argument. Usage: %s [server|client]\n", argv[0]);
+        return 1;
+    }
 
-    // Clean up
-    endwin();
     return 0;
 }
