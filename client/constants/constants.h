@@ -24,14 +24,24 @@ typedef struct Player {
     struct Player* next;
 } Player;
 
+typedef enum {
+    NONE,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT
+} MoveDirection;
+
 typedef struct {
     int game_status;
     int server_status;
     Player players[MAX_PLAYERS];
+    char map[MAP_HEIGHT][MAP_WIDTH];
+    MoveDirection next_move;
+    Player * current_player;
+
 } Game;
 
-
-extern char map[MAP_HEIGHT][MAP_WIDTH];
 void load_map(char * filename);
 
 #endif //SO2_CONSTANTS_H
