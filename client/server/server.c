@@ -36,6 +36,42 @@ int create_and_attach_shared_memory(Game** game) {
     return shmid;
 }
 
+//this only use in add player
+Player* create_player(int id) {
+    Player* new_player = (Player*)malloc(sizeof(Player));
+    new_player->x = id + 10;
+    new_player->y = id + 10;
+    new_player->id = id;
+    new_player->next = new_player; // Initially, the player points to itself
+    return new_player;
+}
+
+Player* add_player(Player* last_player, int id) {
+    Player* new_player = create_player(id);
+    if (last_player == NULL) {
+        return new_player;
+    }
+    new_player->id = last_player->id + 1;
+    new_player->next = last_player->next;
+    last_player->next = new_player;
+    return new_player;
+}
+
+int add_player_to_shared_memory(Player *player, Game *shared_memory) {
+    if (shared_memory != NULL && player != NULL) {
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (shared_memory->players[i].isAssigned == FALSE) {
+                shared_memory->players[i] = *player;
+                shared_memory->players[i].isAssigned = TRUE;
+                return i;
+            }
+        }
+        fprintf(stderr, "Error: Maximum number of players reached.\n");
+        return -1;
+    }
+    return -1;
+}
+
 void initialize_game_state(Game* game, const char * filename) {
 
     if(game != NULL && filename != NULL){
@@ -43,6 +79,9 @@ void initialize_game_state(Game* game, const char * filename) {
         game->server_status = READY;
         game->next_move = NONE;
         game->current_player = NULL;
+        game->current_player_id = 0;
+        game->create_player = false;
+        game->created = false;
        // memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
 
         load_map(filename, game);
@@ -59,7 +98,7 @@ char get_next_move_char(Game * game){
     char for_return = ' ';
     int x = game->current_player->x;
     int y = game->current_player->y;
-
+    //printf("%d",  game->current_player->x);
     switch(game->next_move){
         case UP:
             for_return = game->map[y - 1][x];
@@ -88,6 +127,7 @@ bool is_move_allowed(Game * game){
             else{
                 char obstacles[] = "W#";
                 char next_move = get_next_move_char(game);
+                printf("[%c]",  next_move);
 
                 // check if the next move is one of the obstacles
                 if (strchr(obstacles, next_move) != NULL) {
@@ -105,31 +145,31 @@ bool is_move_allowed(Game * game){
 
 int process_player_move_request(Game * game){
     if(game != NULL){
+        if(game->current_player == NULL){
+            printf("Current player is null");
+            return -1;
+        }
         if(is_move_allowed(game)){
-
-            int x = game->current_player->x;
-            int y = game->current_player->y;
-            int id = game->current_player->id;
+            game->map[game->players[game->current_player_id].y][game->players[game->current_player_id].x] = ' ';
 
             switch(game->next_move){
                 case UP:
-                    game->map[y - 1][x] = (char)('0' + id);
+                    game->players[game->current_player_id].y--;
                     break;
                 case DOWN:
-                    game->map[y + 1][x] = (char)('0' + id);
+                    game->players[game->current_player_id].y++;
                     break;
                 case RIGHT:
-                    game->map[y][x + 1] = (char)('0' + id);
+                    game->players[game->current_player_id].x++;
                     break;
                 case LEFT:
-                    game->map[y][x - 1] = (char)('0' + id);
+                    game->players[game->current_player_id].x--;
                     break;
                 case NONE:
                     break;
             }
 
             // change the previous char to empty space
-            game->map[y][x] = ' ';
             return 0;
         }
     }
@@ -137,34 +177,45 @@ int process_player_move_request(Game * game){
 }
 
 void process_client_requests(Game* game) {
-    while (1) {
-
+    int ch;
+    while ((ch = getch()) != 'q') { // Exit the loop when the 'q' key is pressed
         if (game->server_status == READY){
             printf("server is running...\n");
             fflush(stdout);
 
-            /*
             /// ACCESS TO SHARED MEM
             if (sem_wait(&sem) == -1) {
                 perror("sem_wait");
                 return;
-            }*/
-            //process_player_move_request(game);
+            }
+
+            //ADDING PLAYERS
+            if(game->create_player == true){
+                game->current_player = add_player(game->current_player, game->current_player_id);
+                add_player_to_shared_memory(game->current_player, game);
+                game->create_player = false;
+                game->created = true;
+            }
+
+            if(game->current_player != NULL && game->next_move != NONE){
+                process_player_move_request(game);
+                game->next_move = NONE;
+            }
             update_map(game);
-            /*
             /// release
             if (sem_post(&sem) == -1) {
                 perror("sem_post");
                 return;
-            }*/
+            }
 
             if (game->game_status == GAME_END) { // Example status: end the game
                 break;
             }
         }
-        usleep(1000); // Sleep for a short duration to reduce CPU usage
+        sleep(1); // Sleep for a short duration to reduce CPU usage
     }
 }
+
 
 void detach_and_remove_shared_memory(int shmid, Game* game) {
     if (shmdt(game) == -1) {
@@ -176,18 +227,19 @@ void detach_and_remove_shared_memory(int shmid, Game* game) {
     }
 }
 
-
+///TODO: delete fixed offset - players should spawn randomly
 int update_map(Game * game){
     if(game != NULL){
         for(int i = 0; i < MAX_PLAYERS; i++){
             if(game->players[i].isAssigned == TRUE){
-                game->map[game->players[i].y + 10][game->players[i].x + 10] = (char)('0' + game->players[i].id);
+                game->map[game->players[i].y][game->players[i].x] = (char)('0' + game->players[i].id);
             }
         }
         return 0;
     }
     return -1;
 }
+
 
 Game* connect_to_shared_memory(int* shmid) {
     *shmid = shmget(SHM_KEY, SHM_SIZE, 0666);
@@ -205,6 +257,9 @@ Game* connect_to_shared_memory(int* shmid) {
     return game;
 }
 
+///TODO: dodaj wątek do kazdego nowego dolaczajcego
+/// klienta aby serwer mogl updatowac mape w jednej turze
+/// dla wszystkich klientow
 
 void run_server() {
     Game* game;

@@ -15,6 +15,14 @@
 #define MOVED 2
 #define GAME_END 0
 
+typedef enum {
+    NONE,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT
+} MoveDirection;
+
 typedef struct Player {
     int id;
     int x;
@@ -24,13 +32,6 @@ typedef struct Player {
     struct Player* next;
 } Player;
 
-typedef enum {
-    NONE,
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT
-} MoveDirection;
 
 typedef struct {
     int game_status;
@@ -39,6 +40,9 @@ typedef struct {
     char map[MAP_HEIGHT][MAP_WIDTH];
     MoveDirection next_move;
     Player * current_player;
+    int current_player_id;
+    bool create_player;
+    bool created;
 
 } Game;
 
