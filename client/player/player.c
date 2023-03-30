@@ -122,14 +122,12 @@ void run_client() {
     keypad(stdscr, TRUE);
     curs_set(0);
 
-
-    // Load and display the map
-    load_map("/mnt/c/Users/wlodi/CLionProjects/SO2/mapEmpty.txt");
     Game * shared_game_memory = NULL;
     int memory_id;
     shared_game_memory = connect_to_shared_memory(&memory_id);
 
     Player * last_player = get_last_player(shared_game_memory);
+    draw_map(shared_game_memory);
 
     if (last_player == NULL) {
         // If there are no players in the shared memory, create the first player with id 0
@@ -144,7 +142,7 @@ void run_client() {
     while ((ch = getch()) != 'q') { // Exit the loop when the 'q' key is pressed
 
         draw_map(shared_game_memory);
-        move_player(shared_game_memory ,ch, last_player);
+        //move_player(shared_game_memory ,ch, last_player);
         // Update the screen, draw player, etc
         refresh();
     }

@@ -36,15 +36,22 @@ int create_and_attach_shared_memory(Game** game) {
     return shmid;
 }
 
-void initialize_game_state(Game* game) {
-    game->game_status = READY; // Example status: game is ready
-    game->server_status = READY;
-    game->next_move = NONE;
-    game->current_player = NULL;
-    memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
-    for(int i = 0; i < MAX_PLAYERS; i++){
-        game->players[i].isAssigned = false;
+void initialize_game_state(Game* game, const char * filename) {
+
+    if(game != NULL && filename != NULL){
+        game->game_status = READY; // Example status: game is ready
+        game->server_status = READY;
+        game->next_move = NONE;
+        game->current_player = NULL;
+       // memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
+
+        load_map(filename, game);
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            game->players[i].isAssigned = false;
+        }
+        return;
     }
+    printf("error with initialization!");
 }
 
 
@@ -142,7 +149,7 @@ void process_client_requests(Game* game) {
                 perror("sem_wait");
                 return;
             }*/
-            process_player_move_request(game);
+            //process_player_move_request(game);
             update_map(game);
             /*
             /// release
@@ -206,7 +213,8 @@ void run_server() {
         exit(1);
     }
 
-    initialize_game_state(game);
+
+    initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/SO2/mapEmpty.txt");
     initialize_semaphore();
     process_client_requests(game);
 

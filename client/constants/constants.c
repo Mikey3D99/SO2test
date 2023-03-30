@@ -6,9 +6,14 @@
 #include <stdio.h>
 #include <errno.h>
 
-char map[MAP_HEIGHT][MAP_WIDTH] = {};
 
-void load_map(char *filename) {
+void load_map(const char *filename, Game * game) {
+
+    if(game == NULL){
+        fprintf(stderr, "Error with game structure: %s (error %d)\n", filename, errno);
+        return;
+    }
+
     // Open map file
     FILE *fp = fopen(filename, "r");
     if (fp == NULL) {
@@ -25,7 +30,7 @@ void load_map(char *filename) {
                 fclose(fp);
                 return;
             }
-            map[y][x] = (char)c;
+            game->map[y][x] = (char)c;
         }
     }
 }

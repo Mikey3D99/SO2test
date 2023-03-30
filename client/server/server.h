@@ -17,7 +17,7 @@
 #include <semaphore.h>
 
 int create_and_attach_shared_memory(Game** game);
-void initialize_game_state(Game* game);
+void initialize_game_state(Game* game, const char * filename);
 void process_client_requests(Game* game);
 void detach_and_remove_shared_memory(int shmid, Game* game);
 void run_server();

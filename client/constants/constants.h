@@ -42,6 +42,6 @@ typedef struct {
 
 } Game;
 
-void load_map(char * filename);
+void load_map(const char * filename, Game * game);
 
 #endif //SO2_CONSTANTS_H
