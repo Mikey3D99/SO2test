@@ -95,9 +95,9 @@ void initialize_game_state(Game* game, const char * filename) {
 
 
 char get_next_move_char(Game * game){
-    char for_return = ' ';
-    int x = game->current_player->x;
-    int y = game->current_player->y;
+    char for_return = 'W';
+    int x = game->players[game->current_player_id].x;
+    int y = game->players[game->current_player_id].y;
     //printf("%d",  game->current_player->x);
     switch(game->next_move){
         case UP:
