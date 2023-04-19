@@ -21,12 +21,15 @@ void initialize_game_state(Game* game, const char * filename);
 void process_client_requests(Game* game);
 void detach_and_remove_shared_memory(int shmid, Game* game);
 void run_server();
+void init_players(Game* game);
+Player * find_free_spot(Game * game);
+Player * add_player(int id, Game * game);
 int update_map(Game * game);
 Game* connect_to_shared_memory(int* shmid);
-int initialize_semaphore();
-void destroy_semaphore();
+int initialize_semaphore(Game* game);
+void destroy_semaphore(Game* game);
 int process_player_move_request(Game * game);
-bool is_move_allowed(Game * game);
-char get_next_move_char(Game * game);
+bool is_move_allowed(Game * game, Player * player);
+char get_next_move_char(Game * game, Player * player);
 
 #endif //SO2_SERVER_H

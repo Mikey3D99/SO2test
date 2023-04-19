@@ -6,6 +6,7 @@
 #define SO2_CONSTANTS_H
 
 #include <stdbool.h>
+#include <semaphore.h>
 #define MAP_WIDTH 50
 #define MAP_HEIGHT 21
 #define MAX_PLAYERS 4
@@ -29,7 +30,7 @@ typedef struct Player {
     int y;
     bool isAssigned;
     // Add other player attributes here, such as name, score, etc.
-    struct Player* next;
+    MoveDirection next_move;
 } Player;
 
 
@@ -38,11 +39,10 @@ typedef struct {
     int server_status;
     Player players[MAX_PLAYERS];
     char map[MAP_HEIGHT][MAP_WIDTH];
-    MoveDirection next_move;
-    Player * current_player;
-    int current_player_id;
     bool create_player;
+    int create_player_id;
     bool created;
+    sem_t sem;
 
 } Game;
 

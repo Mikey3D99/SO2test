@@ -1,9 +1,8 @@
 //
 // Created by wlodi on 24.03.2023.
 //
-
 #include <malloc.h>
-#include <sys/wait.h>
+#include <pthread.h>
 #include "player.h"
 
 
@@ -11,45 +10,53 @@ int send_create_player_request(Game * game){
     if(game == NULL)
         return -1;
 
+    // Wait for the semaphore
+    if (sem_wait(&game->sem) == -1) {
+        perror("sem_wait");
+        return -1;
+    }
+
     game->create_player = true;
+
+    // Release the semaphore
+    if (sem_post(&game->sem) == -1) {
+        perror("sem_post");
+        return -1;
+    }
+
 
     return 0;
 }
 
-int move_player(Game * game, int ch, Player * current_player){
 
-    if(game == NULL){
-        return printf("Game structure null - probably not initialized"), -1;
-    }
-    if(current_player == NULL){
+/// ten segment zmienia tylko indywidualne pola playera, czyli nie powinno byc zadnych konfliktow
+int move_player(int ch, Player * player){
+
+    if(player == NULL){
         return printf("Current player is invalid - null"), -1;
     }
-
 
     /// ask server to move the current player
     switch (ch) {
         case KEY_UP:
-            game->next_move = UP;
+            player->next_move = UP;
             break;
         case KEY_DOWN:
             // Move player down
-            game->next_move = DOWN;
+            player->next_move = DOWN;
             break;
         case KEY_LEFT:
             // Move player left
-            game->next_move = LEFT;
+            player->next_move = LEFT;
             break;
         case KEY_RIGHT:
             // Move player right
-            game->next_move = RIGHT;
+            player->next_move = RIGHT;
             break;
         default:
-            game->next_move = NONE;
+            player->next_move = NONE;
 
     }
-    /// give the server info about current player
-    game->current_player = current_player;
-
     return 0;
 }
 
@@ -67,6 +74,23 @@ void draw_map(Game * game){
     }
 }
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *redraw_map_thread(void *data) {
+    Game *shared_data = (Game *)data;
+
+    while (true) {
+        pthread_mutex_lock(&mutex);
+        draw_map(shared_data);
+        pthread_mutex_unlock(&mutex);
+        refresh();
+        // Redraw every 100ms, adjust this value as needed
+    }
+    return NULL;
+}
+
+
+//TODO: dodaj semafor zeby przy zapisie do pamieci dzielonej (same wyslanie sygnalu) bylo zablokowane dla innych
 void run_client() {
     // Initialize ncurses
     initscr();
@@ -82,28 +106,39 @@ void run_client() {
     ///Send create player request
     send_create_player_request(shared_game_memory);
 
-    //created the player
+    //created the player, get him from server to client in order to be able to send move requests
     Player * current_player = NULL;
     while(true){
-        if(shared_game_memory->created == true && shared_game_memory->create_player == false){
-            current_player = shared_game_memory->current_player;
+        printf("Waiting for the response from server that the player was created...");
+        if(shared_game_memory->created == true &&
+        shared_game_memory->create_player == false &&
+        shared_game_memory->players[shared_game_memory->create_player_id].isAssigned == true){
+            current_player = &shared_game_memory->players[shared_game_memory->create_player_id];
             break;
         }
     }
 
 
+    pthread_t redraw_thread;
+    pthread_create(&redraw_thread, NULL, redraw_map_thread, shared_game_memory);
+
     //client loop
     int ch;
     while (true) { // Exit the loop when the 'q' key is pressed
-        if((ch = getch()) == 'q')
+        ch = getch();
+        if (ch == 'q') {
             break;
-        draw_map(shared_game_memory);
-        move_player(shared_game_memory ,ch, current_player);
+        }
+        pthread_mutex_lock(&mutex);
+        move_player(ch, current_player);
+        pthread_mutex_unlock(&mutex);
         // Update the screen, draw player, etc
         refresh();
-
     }
 
-    // Clean up and close ncurses
+    // Clean up and exit
+    pthread_cancel(redraw_thread);
+    pthread_join(redraw_thread, NULL);
+    pthread_mutex_destroy(&mutex);
     endwin();
 }

@@ -10,9 +10,7 @@
 
 
 void draw_map(Game * game);
-Player* create_player(int id);
-Player* add_player(Player* last_player, int id);
-void play_game(Player* current_player, int num_rounds);
+Player *create_player(int id, Game *game);
 void run_client();
-int move_player(Game * game, int ch, Player * current_player);
+int move_player(int ch, Player * player);
 #endif //SO2_PLAYER_H

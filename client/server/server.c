@@ -4,21 +4,24 @@
 #include "server.h"
 
 sem_t sem;
+int current_number_of_players = 0;
 
 // 1 pshared - share semaphore among processes; 1 - initial value
-int initialize_semaphore() {
-    if (sem_init(&sem, 1, 1) == -1) {
+int initialize_semaphore(Game* game) {
+    if (sem_init(&game->sem, 1, 1) == -1) {
         perror("sem_init");
         return -1;
     }
     return 0;
 }
 
-void destroy_semaphore() {
-    if (sem_destroy(&sem) == -1) {
+
+void destroy_semaphore(Game* game) {
+    if (sem_destroy(&game->sem) == -1) {
         perror("sem_destroy");
     }
 }
+
 
 int create_and_attach_shared_memory(Game** game) {
     int shmid = shmget(SHM_KEY, SHM_SIZE, IPC_CREAT | 0666);
@@ -36,40 +39,19 @@ int create_and_attach_shared_memory(Game** game) {
     return shmid;
 }
 
-//this only use in add player
-Player* create_player(int id) {
-    Player* new_player = (Player*)malloc(sizeof(Player));
-    new_player->x = id + 10;
-    new_player->y = id + 10;
-    new_player->id = id;
-    new_player->next = new_player; // Initially, the player points to itself
-    return new_player;
-}
 
-Player* add_player(Player* last_player, int id) {
-    Player* new_player = create_player(id);
-    if (last_player == NULL) {
-        return new_player;
+void init_players(Game* game) {
+    if (game == NULL) {
+        return;
     }
-    new_player->id = last_player->id + 1;
-    new_player->next = last_player->next;
-    last_player->next = new_player;
-    return new_player;
-}
 
-int add_player_to_shared_memory(Player *player, Game *shared_memory) {
-    if (shared_memory != NULL && player != NULL) {
-        for (int i = 0; i < MAX_PLAYERS; i++) {
-            if (shared_memory->players[i].isAssigned == FALSE) {
-                shared_memory->players[i] = *player;
-                shared_memory->players[i].isAssigned = TRUE;
-                return i;
-            }
-        }
-        fprintf(stderr, "Error: Maximum number of players reached.\n");
-        return -1;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        game->players[i].id = i;
+        game->players[i].x = 10 + i;
+        game->players[i].y = 10 + i;
+        game->players[i].isAssigned = false;
+        game->players[i].next_move = UP;
     }
-    return -1;
 }
 
 void initialize_game_state(Game* game, const char * filename) {
@@ -77,139 +59,162 @@ void initialize_game_state(Game* game, const char * filename) {
     if(game != NULL && filename != NULL){
         game->game_status = READY; // Example status: game is ready
         game->server_status = READY;
-        game->next_move = NONE;
-        game->current_player = NULL;
-        game->current_player_id = 0;
+        game->create_player_id = -1;
         game->create_player = false;
         game->created = false;
-       // memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
-
+        memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
+        init_players(game);
         load_map(filename, game);
-        for(int i = 0; i < MAX_PLAYERS; i++){
-            game->players[i].isAssigned = false;
-        }
         return;
     }
     printf("error with initialization!");
 }
 
 
-char get_next_move_char(Game * game){
+char get_next_move_char(Game * game, Player * player){
     char for_return = 'W';
-    int x = game->players[game->current_player_id].x;
-    int y = game->players[game->current_player_id].y;
-    //printf("%d",  game->current_player->x);
-    switch(game->next_move){
-        case UP:
-            for_return = game->map[y - 1][x];
-            break;
-        case DOWN:
-            for_return = game->map[y + 1][x];
-            break;
-        case RIGHT:
-            for_return = game->map[y][x + 1];
-            break;
-        case LEFT:
-            for_return = game->map[y][x - 1];
-            break;
-        case NONE:
-            break;
+
+    if(game != NULL && player != NULL && player->isAssigned){
+        int x = player->x;
+        int y = player->y;
+        printf("[%d]", player->next_move);
+        switch(player->next_move){
+            case UP:
+                for_return = game->map[y - 1][x];
+                break;
+            case DOWN:
+                for_return = game->map[y + 1][x];
+                break;
+            case RIGHT:
+                for_return = game->map[y][x + 1];
+                break;
+            case LEFT:
+                for_return = game->map[y][x - 1];
+                break;
+            case NONE:
+                break;
+        }
     }
+
     return for_return;
 }
 
-bool is_move_allowed(Game * game){
-    if(game != NULL){
-        if(game->current_player != NULL){
-            if(game->next_move == NONE){
-                return true;
-            }
-            else{
-                char obstacles[] = "W#";
-                char next_move = get_next_move_char(game);
-                printf("[%c]",  next_move);
+bool is_move_allowed(Game * game, Player * player){
+    if(game != NULL && player != NULL && player->isAssigned){
+        Player *shared_player = &game->players[player->id];
 
-                // check if the next move is one of the obstacles
-                if (strchr(obstacles, next_move) != NULL) {
-                    return false;
-                }
-                else {
-                    return true;
-                }
-            }
+        char obstacles[] = "W#";
+        char next_move = get_next_move_char(game, shared_player);
+        printf("[%c]",  next_move);
+
+        // check if the next move is one of the obstacles
+        if (strchr(obstacles, next_move) != NULL) {
+            return false;
+        }
+        else {
+            return true;
         }
     }
     return false;
 }
 
 
+
 int process_player_move_request(Game * game){
     if(game != NULL){
-        if(game->current_player == NULL){
-            printf("Current player is null");
-            return -1;
-        }
-        if(is_move_allowed(game)){
-            game->map[game->players[game->current_player_id].y][game->players[game->current_player_id].x] = ' ';
 
-            switch(game->next_move){
-                case UP:
-                    game->players[game->current_player_id].y--;
-                    break;
-                case DOWN:
-                    game->players[game->current_player_id].y++;
-                    break;
-                case RIGHT:
-                    game->players[game->current_player_id].x++;
-                    break;
-                case LEFT:
-                    game->players[game->current_player_id].x--;
-                    break;
-                case NONE:
-                    break;
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if(game->players[i].isAssigned == true){
+
+                if(is_move_allowed(game, &game->players[i])){
+                    game->map[game->players[i].y][game->players[i].x] = ' ';
+
+                    switch(game->players[i].next_move){
+                        case UP:
+                            game->players[i].y--;
+                            break;
+                        case DOWN:
+                            game->players[i].y++;
+                            break;
+                        case RIGHT:
+                            game->players[i].x++;
+                            break;
+                        case LEFT:
+                            game->players[i].x--;
+                            break;
+                        case NONE:
+                            break;
+                    }
+
+                    // next move clear
+                    game->players[i].next_move = NONE;
+
+                    return 0;
+                }
             }
-
-            // change the previous char to empty space
-            return 0;
         }
     }
     return -1;
 }
 
+Player * find_free_spot(Game * game){
+    if(game == NULL){
+        return NULL;
+    }
+
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        Player * current = &game->players[i];
+        if(!current->isAssigned){
+            return current;
+        }
+    }
+
+    return NULL;
+}
+
+Player * add_player(int id, Game * game){
+    if(game == NULL){
+        return NULL;
+    }
+
+    if(id >= 0 && id < 4){
+        game->players[id].isAssigned = true;
+    }
+    return NULL;
+}
+
 void process_client_requests(Game* game) {
     int ch;
-    while ((ch = getch()) != 'q') { // Exit the loop when the 'q' key is pressed
+    while (1) { // Exit the loop when the 'q' key is pressed
         if (game->server_status == READY){
             printf("server is running...\n");
             fflush(stdout);
 
-            /// ACCESS TO SHARED MEM
-            if (sem_wait(&sem) == -1) {
+            // Wait for the semaphore
+            if (sem_wait(&game->sem) == -1) {
                 perror("sem_wait");
                 return;
             }
 
-            //ADDING PLAYERS
-            if(game->create_player == true){
-                game->current_player = add_player(game->current_player, game->current_player_id);
-                add_player_to_shared_memory(game->current_player, game);
+            //ADDING PLAYERS /// TODO: do naprawy, przeciez player juz istnieje w tablicy tylko musi miec zmienione property pod siebie
+            Player * newly_created_player = NULL;
+            if(game->create_player == true && current_number_of_players < 3){
+                newly_created_player = find_free_spot(game);
+                add_player(newly_created_player->id, game);
                 game->create_player = false;
                 game->created = true;
+                game->create_player_id = newly_created_player->id;
+                current_number_of_players++;
             }
 
-            if(game->current_player != NULL && game->next_move != NONE){
-                process_player_move_request(game);
-                game->next_move = NONE;
-            }
+            process_player_move_request(game);
             update_map(game);
-            /// release
-            if (sem_post(&sem) == -1) {
+
+
+            // Release the semaphore
+            if (sem_post(&game->sem) == -1) {
                 perror("sem_post");
                 return;
-            }
-
-            if (game->game_status == GAME_END) { // Example status: end the game
-                break;
             }
         }
         sleep(1); // Sleep for a short duration to reduce CPU usage
@@ -270,11 +275,11 @@ void run_server() {
 
 
     initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/SO2/mapEmpty.txt");
-    initialize_semaphore();
+    initialize_semaphore(game);
     process_client_requests(game);
 
     // Set the server status to 0 to signal the update_server_status thread to exit
     game->server_status = 0;
     detach_and_remove_shared_memory(shmid, game);
-    destroy_semaphore();
+    destroy_semaphore(game);
 }
