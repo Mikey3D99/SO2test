@@ -2,6 +2,9 @@
 // Created by wlodi on 26.03.2023.
 //
 #include "server.h"
+#include <stdbool.h>
+#include <stdlib.h>
+#include <time.h>
 
 sem_t sem;
 int current_number_of_players = 0;
@@ -39,16 +42,43 @@ int create_and_attach_shared_memory(Game** game) {
     return shmid;
 }
 
+void random_coordinates(int *x, int *y) {
+    *x = rand() % MAP_WIDTH - 5;
+    *y = rand() % MAP_HEIGHT - 5;
+}
+
+bool is_valid_position(Game* game, char map[][MAP_WIDTH], int x, int y, int current_player) {
+    if (map[y][x] != ' ') {
+        return false;
+    }
+
+    for (int i = 0; i < current_player; i++) {
+        if (game->players[i].x == x && game->players[i].y == y) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 void init_players(Game* game) {
     if (game == NULL) {
         return;
     }
 
+    srand(time(0)); // Seed the random number generator
+
     for (int i = 0; i < MAX_PLAYERS; i++) {
         game->players[i].id = i;
-        game->players[i].x = 10 + i;
-        game->players[i].y = 10 + i;
+        int x, y;
+
+        do {
+            random_coordinates(&x, &y);
+        } while (!is_valid_position(game, game->map, x, y, i));
+
+        game->players[i].x = x;
+        game->players[i].y = y;
         game->players[i].isAssigned = false;
         game->players[i].next_move = UP;
     }

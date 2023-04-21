@@ -21,6 +21,8 @@ void initialize_game_state(Game* game, const char * filename);
 void process_client_requests(Game* game);
 void detach_and_remove_shared_memory(int shmid, Game* game);
 void run_server();
+void random_coordinates(int *x, int *y);
+bool is_valid_position(Game* game, char map[][MAP_WIDTH], int x, int y, int current_player);
 void init_players(Game* game);
 Player * find_free_spot(Game * game);
 Player * add_player(int id, Game * game);
