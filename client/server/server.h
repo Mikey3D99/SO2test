@@ -36,5 +36,6 @@ void destroy_semaphore(Game* game);
 int process_player_move_request(Game * game);
 bool is_move_allowed(Game * game, Player * player);
 char get_next_move_char(Game * game, Player * player);
+int find_closest_player_id(Game * game, int beast_id);
 
 #endif //SO2_SERVER_H

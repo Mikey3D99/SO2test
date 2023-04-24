@@ -298,6 +298,73 @@ bool is_player_obstructed_by_wall(int player_x, int player_y, int beast_x, int b
     return false;
 }
 
+int find_closest_player_id(Game * game, int beast_id){
+    if(game == NULL){
+        return -1;
+    }
+
+    Beast * current_beast = &game->beasts[beast_id];
+    int point_number = 0;
+    Player * min_player = NULL;
+    int min_distance = 0;
+
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(game->players[i].isAssigned){
+            Point * points = bresenham(game->players[i].x, game->players[i].y,
+                                         current_beast->current_pos.x, current_beast->current_pos.y,
+                                         &point_number);
+            free(points);
+            if(i == 0){
+                min_distance = point_number;
+                min_player = &game->players[i];
+            }
+            else{
+                if(min_distance > point_number){
+                    min_distance = point_number;
+                    min_player = &game->players[i];
+                }
+            }
+        }
+    }
+    return min_player->id;
+}
+
+
+// byc moze tutaj osobny watek aby bestia patrzyla caly czas czy jakis gracz nie wszedl w jej sight
+void beast_follow_player(int beast_id, int player_id, Game * game){
+    if(game == NULL){
+        return;
+    }
+
+    int distanceX = abs(game->players[player_id].x - game->beasts[beast_id].current_pos.x);
+    int distanceY = abs(game->players[player_id].y - game->beasts[beast_id].current_pos.y);
+    // nie ma scian i jest w zasiegu
+    if(!is_player_obstructed_by_wall(game->players[player_id].x,
+                                    game->players[player_id].y,
+                                    game->beasts[beast_id].current_pos.x,
+                                    game->beasts[beast_id].current_pos.y, game, 7)){
+
+        // clean the spot
+        game->map[game->beasts[beast_id].current_pos.y][game->beasts[beast_id].current_pos.x] = ' ';
+
+        int beast_x = game->beasts[beast_id].current_pos.x;
+        int beast_y = game->beasts[beast_id].current_pos.y;
+        int player_x = game->players[player_id].x;
+        int player_y = game->players[player_id].y;
+
+        //zanim zmieni pozycje bestii sprawdz czy nie ma sciany
+        if (distanceX > distanceY) {
+            beast_x += (game->players[player_id].x > game->beasts[beast_id].current_pos.x) ? 1 : -1;
+        } else {
+            beast_y += (game->players[player_id].y > game->beasts[beast_id].current_pos.y) ? 1 : -1;
+        }
+        if(game->map[beast_y][beast_x] != 'W'){
+            game->beasts[beast_id].current_pos.x = beast_x;
+            game->beasts[beast_id].current_pos.y = beast_y;
+        }
+    }
+}
+
 void process_beasts(Game * game){
     if(game == NULL){
         return;
@@ -331,17 +398,7 @@ void process_client_requests(Game* game) {
 
             //TEST BREHNAM
             if(game->players[0].isAssigned && game->beasts[0].isAssigned){
-                //printf("[%d][%d][%d][%d]\n", game->beasts[0].current_pos.x, game->beasts[0].current_pos.y,
-                //game->players[0].x, game->players[0].y);
-                if(is_player_obstructed_by_wall(game->players[0].x,
-                                                game->players[0].y,
-                                                game->beasts[0].current_pos.x,
-                                                game->beasts[0].current_pos.y, game, 5)){
-                    printf("The beast does not see the player");
-                }
-                else{
-                    printf("BEAST SPOTTED A PLAYER!");
-                }
+                beast_follow_player(0, 0, game);
             }
 
             process_player_move_request(game);
