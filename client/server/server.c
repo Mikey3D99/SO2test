@@ -43,16 +43,17 @@ int create_and_attach_shared_memory(Game** game) {
 }
 
 void random_coordinates(int *x, int *y) {
-    *x = rand() % MAP_WIDTH - 5;
-    *y = rand() % MAP_HEIGHT - 5;
+    *x = (rand() %(MAP_WIDTH - 3 + 1)) + 3;
+    *y = (rand() %(MAP_HEIGHT - 3 + 1)) + 3;
 }
 
-bool is_valid_position(Game* game, char map[][MAP_WIDTH], int x, int y, int current_player) {
-    if (map[y][x] != ' ') {
+bool is_valid_position(Game* game, int x, int y) {
+    if (game->map[y][x] != ' ') {
         return false;
     }
 
-    for (int i = 0; i < current_player; i++) {
+    // tutaj ma sprawdzic czy pozycja x y nie jest juz zabrana przez jakiegos gracza
+    for (int i = 0; i < MAX_PLAYERS; i++) {
         if (game->players[i].x == x && game->players[i].y == y) {
             return false;
         }
@@ -61,6 +62,30 @@ bool is_valid_position(Game* game, char map[][MAP_WIDTH], int x, int y, int curr
     return true;
 }
 
+int initialize_beasts(Game * game){
+    if(game == NULL){
+        return -1;
+    }
+
+    srand(time(0)); // Seed the random number generator
+
+    for (int i = 0; i < MAX_BEASTS; i++) {
+        game->beasts[i].id = i;
+        int x, y;
+
+        do {
+            random_coordinates(&x, &y);
+        } while (!is_valid_position(game, x, y));
+
+        game->beasts[i].current_pos.x = x;
+        game->beasts[i].current_pos.y = y;
+        game->beasts[i].isAssigned = false;
+        game->beasts[i].next_move = NONE;
+
+        if(i == 0)
+            game->beasts[i].isAssigned = true;
+    }
+}
 
 void init_players(Game* game) {
     if (game == NULL) {
@@ -75,14 +100,16 @@ void init_players(Game* game) {
 
         do {
             random_coordinates(&x, &y);
-        } while (!is_valid_position(game, game->map, x, y, i));
+        } while (!is_valid_position(game, x, y));
 
         game->players[i].x = x;
         game->players[i].y = y;
         game->players[i].isAssigned = false;
-        game->players[i].next_move = UP;
+        game->players[i].next_move = NONE;
     }
 }
+
+
 
 void initialize_game_state(Game* game, const char * filename) {
 
@@ -93,8 +120,11 @@ void initialize_game_state(Game* game, const char * filename) {
         game->create_player = false;
         game->created = false;
         memset(game->map, ' ', MAP_HEIGHT * MAP_WIDTH);
-        init_players(game);
         load_map(filename, game);
+
+        // AFTER LOADING MAP
+        init_players(game);
+        initialize_beasts(game);
         return;
     }
     printf("error with initialization!");
@@ -135,7 +165,7 @@ bool is_move_allowed(Game * game, Player * player){
 
         char obstacles[] = "W#";
         char next_move = get_next_move_char(game, shared_player);
-        printf("[%c]",  next_move);
+        //printf("[%c]",  next_move);
 
         // check if the next move is one of the obstacles
         if (strchr(obstacles, next_move) != NULL) {
@@ -212,12 +242,73 @@ Player * add_player(int id, Game * game){
     }
     return NULL;
 }
+Point* bresenham(int x1, int y1, int x2, int y2, int *num_points) { // bresenham algorithm for checking the indices between player and the enemy
+    int dx = abs(x2 - x1);
+    int dy = abs(y2 - y1);
+    int sx = x1 < x2 ? 1 : -1;
+    int sy = y1 < y2 ? 1 : -1;
+    int err = (dx > dy ? dx : -dy) / 2;
+    int e2;
+
+    // Calculate an upper bound for the number of points
+    int max_points = (dx > dy ? dx : dy) + 1;
+    Point *points = (Point *)malloc(max_points * sizeof(Point));
+    *num_points = 0;
+
+    while (1) {
+        Point p = {x1, y1};
+        points[(*num_points)++] = p;
+        if (x1 == x2 && y1 == y2) break;
+        e2 = err;
+        if (e2 > -dx) {
+            err -= dy;
+            x1 += sx;
+        }
+        if (e2 < dy) {
+            err += dx;
+            y1 += sy;
+        }
+    }
+
+    return points;
+}
+
+bool is_player_obstructed_by_wall(int player_x, int player_y, int beast_x, int beast_y, Game * game, int range){
+    if(game == NULL){
+        return true;
+    }
+    int num_points = 0;
+    Point * points_between = bresenham(beast_x, beast_y, player_x, player_y, &num_points);
+
+    if(num_points > range){ //if out of sight
+        free(points_between);
+        return true;
+    }
+
+    if(points_between != NULL){
+        for (int i = 0; i < num_points; i++) {
+            //printf("[%c]\n", game->map[points_between[i].y][points_between[i].x]);
+            if (game->map[points_between[i].y][points_between[i].x] == 'W') {
+                free(points_between);
+                return true;
+            }
+        }
+    }
+    free(points_between);
+    return false;
+}
+
+void process_beasts(Game * game){
+    if(game == NULL){
+        return;
+    }
+
+}
 
 void process_client_requests(Game* game) {
     int ch;
     while (1) { // Exit the loop when the 'q' key is pressed
         if (game->server_status == READY){
-            printf("server is running...\n");
             fflush(stdout);
 
             // Wait for the semaphore
@@ -235,6 +326,22 @@ void process_client_requests(Game* game) {
                 game->created = true;
                 game->create_player_id = newly_created_player->id;
                 current_number_of_players++;
+            }
+
+
+            //TEST BREHNAM
+            if(game->players[0].isAssigned && game->beasts[0].isAssigned){
+                //printf("[%d][%d][%d][%d]\n", game->beasts[0].current_pos.x, game->beasts[0].current_pos.y,
+                //game->players[0].x, game->players[0].y);
+                if(is_player_obstructed_by_wall(game->players[0].x,
+                                                game->players[0].y,
+                                                game->beasts[0].current_pos.x,
+                                                game->beasts[0].current_pos.y, game, 5)){
+                    printf("The beast does not see the player");
+                }
+                else{
+                    printf("BEAST SPOTTED A PLAYER!");
+                }
             }
 
             process_player_move_request(game);
@@ -268,6 +375,11 @@ int update_map(Game * game){
         for(int i = 0; i < MAX_PLAYERS; i++){
             if(game->players[i].isAssigned == TRUE){
                 game->map[game->players[i].y][game->players[i].x] = (char)('0' + game->players[i].id);
+            }
+        }
+        for(int i = 0; i < MAX_BEASTS; i++){
+            if(game->beasts[i].isAssigned == TRUE){
+                game->map[game->beasts[i].current_pos.y][game->beasts[i].current_pos.x] = '*';
             }
         }
         return 0;

@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include <semaphore.h>
+
 #define MAP_WIDTH 50
 #define MAP_HEIGHT 21
 #define MAX_PLAYERS 4
@@ -24,6 +25,12 @@ typedef enum {
     RIGHT
 } MoveDirection;
 
+typedef struct {
+    int x;
+    int y;
+} Point;
+
+
 typedef struct Player {
     int id;
     int x;
@@ -33,11 +40,23 @@ typedef struct Player {
     MoveDirection next_move;
 } Player;
 
+#define MAX_BEASTS 10
+
+typedef struct Beast {
+    int id;
+    Point current_pos;
+    int spawn_x;
+    int spawn_y;
+    bool isAssigned;
+    MoveDirection next_move;
+} Beast;
+
 
 typedef struct {
     int game_status;
     int server_status;
     Player players[MAX_PLAYERS];
+    Beast beasts[MAX_BEASTS];
     char map[MAP_HEIGHT][MAP_WIDTH];
     bool create_player;
     int create_player_id;
