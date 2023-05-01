@@ -10,7 +10,7 @@
 
 #define MAP_WIDTH 50
 #define MAP_HEIGHT 21
-#define MAX_PLAYERS 4
+#define MAX_PLAYERS 2
 #define SHM_KEY 1234
 #define SHM_SIZE 2048
 #define READY 1
@@ -35,12 +35,12 @@ typedef struct Player {
     int id;
     int x;
     int y;
+    int spawn_x;
+    int spawn_y;
     bool isAssigned;
     // Add other player attributes here, such as name, score, etc.
     MoveDirection next_move;
 } Player;
-
-#define MAX_BEASTS 10
 
 typedef struct Beast {
     int id;
@@ -49,6 +49,7 @@ typedef struct Beast {
     int spawn_y;
     bool isAssigned;
     MoveDirection next_move;
+    bool allow_move;
 } Beast;
 
 
@@ -56,13 +57,12 @@ typedef struct {
     int game_status;
     int server_status;
     Player players[MAX_PLAYERS];
-    Beast beasts[MAX_BEASTS];
+    Beast beast;
     char map[MAP_HEIGHT][MAP_WIDTH];
-    bool create_player;
-    int create_player_id;
-    bool created;
+    int number_of_players;
     sem_t sem;
-
+    pthread_mutex_t mutex;
+    pthread_cond_t beast_cond;
 } Game;
 
 void load_map(const char * filename, Game * game);

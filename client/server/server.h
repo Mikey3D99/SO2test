@@ -18,7 +18,7 @@
 
 int create_and_attach_shared_memory(Game** game);
 void initialize_game_state(Game* game, const char * filename);
-void process_client_requests(Game* game);
+void listen_to_client_connections(Game* game);
 void detach_and_remove_shared_memory(int shmid, Game* game);
 void run_server();
 void random_coordinates(int *x, int *y);
@@ -36,6 +36,7 @@ void destroy_semaphore(Game* game);
 int process_player_move_request(Game * game);
 bool is_move_allowed(Game * game, Player * player);
 char get_next_move_char(Game * game, Player * player);
-int find_closest_player_id(Game * game, int beast_id);
+int find_closest_player_id(Game * game);
+void print_map_debug(Game *game);
 
 #endif //SO2_SERVER_H

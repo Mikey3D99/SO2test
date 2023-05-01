@@ -16,7 +16,9 @@ int send_create_player_request(Game * game){
         return -1;
     }
 
-    game->create_player = true;
+    int id = game->number_of_players;
+    game->players[id].isAssigned = true;
+
 
     // Release the semaphore
     if (sem_post(&game->sem) == -1) {
@@ -24,8 +26,7 @@ int send_create_player_request(Game * game){
         return -1;
     }
 
-
-    return 0;
+    return id;
 }
 
 
@@ -63,7 +64,7 @@ int move_player(int ch, Player * player){
 
 void draw_map(Game * game){
     for (int y = 0; y < MAP_HEIGHT; y++){
-            for(int x = 0; x < MAP_WIDTH; x++){
+            for(int x = 0; x < MAP_WIDTH - 1; x++){
                 char tile = game->map[y][x];
                 if (tile == 'W'){
                     mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
@@ -74,19 +75,23 @@ void draw_map(Game * game){
     }
 }
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void *redraw_map_thread(void *data) {
     Game *shared_data = (Game *)data;
-
     while (true) {
-        pthread_mutex_lock(&mutex);
+        if (sem_wait(&shared_data->sem) == -1) {
+            perror("sem_wait");
+            break;
+        }
         draw_map(shared_data);
-        pthread_mutex_unlock(&mutex);
+        // Release the semaphore
+        if (sem_post(&shared_data->sem) == -1) {
+            perror("sem_post");
+            break;
+        }
         refresh();
         // Redraw every 100ms, adjust this value as needed
     }
-    return NULL;
 }
 
 
@@ -102,23 +107,19 @@ void run_client() {
     Game * shared_game_memory = NULL;
     int memory_id;
     shared_game_memory = connect_to_shared_memory(&memory_id);
-
-    ///Send create player request
-    send_create_player_request(shared_game_memory);
-
-    //created the player, get him from server to client in order to be able to send move requests
-    Player * current_player = NULL;
-    while(true){
-        printf("Waiting for the response from server that the player was created...");
-        if(shared_game_memory->created == true &&
-        shared_game_memory->create_player == false &&
-        shared_game_memory->players[shared_game_memory->create_player_id].isAssigned == true){
-            current_player = &shared_game_memory->players[shared_game_memory->create_player_id];
-            break;
-        }
+    if(shared_game_memory == NULL){
+        printf("error memri");
+        return;
     }
 
+    ///Send create player request
+    int player_id = send_create_player_request(shared_game_memory);
+    if(player_id < 0){
+        printf("error creating a player");
+        return;
+    }
 
+    //printf("po wyslaniu rq");
     pthread_t redraw_thread;
     pthread_create(&redraw_thread, NULL, redraw_map_thread, shared_game_memory);
 
@@ -129,9 +130,19 @@ void run_client() {
         if (ch == 'q') {
             break;
         }
-        pthread_mutex_lock(&mutex);
-        move_player(ch, current_player);
-        pthread_mutex_unlock(&mutex);
+        // Wait for the semaphore
+        if (sem_wait(&shared_game_memory->sem) == -1) {
+            perror("sem_wait");
+            break;
+        }
+        if(&shared_game_memory->players[player_id] != NULL ){
+            move_player(ch, &shared_game_memory->players[player_id]);
+        }
+        // Release the semaphore
+        if (sem_post(&shared_game_memory->sem) == -1) {
+            perror("sem_post");
+            break;
+        }
         // Update the screen, draw player, etc
         refresh();
     }
@@ -139,6 +150,5 @@ void run_client() {
     // Clean up and exit
     pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
-    pthread_mutex_destroy(&mutex);
     endwin();
 }
