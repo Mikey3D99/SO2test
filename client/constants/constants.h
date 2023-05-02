@@ -16,7 +16,9 @@
 #define READY 1
 #define MOVED 2
 #define GAME_END 0
-
+#define COIN 1
+#define TREASURE 10
+#define CHEST 50
 typedef enum {
     NONE,
     UP,
@@ -30,6 +32,12 @@ typedef struct {
     int y;
 } Point;
 
+typedef struct Treasure{
+    char type;
+    int amount;
+    int x;
+    int y;
+} Treasure;
 
 typedef struct Player {
     int id;
@@ -42,6 +50,8 @@ typedef struct Player {
     MoveDirection next_move;
     bool is_alive;
     char fov_map[5][5];
+    int carried_coins;
+    int deaths;
 } Player;
 
 typedef struct Beast {
@@ -66,6 +76,7 @@ typedef struct {
     sem_t sem_draw;
     pthread_mutex_t mutex;
     pthread_cond_t beast_cond;
+    Treasure treasure[10];
 } Game;
 
 void load_map(const char * filename, Game * game);

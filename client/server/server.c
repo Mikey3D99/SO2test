@@ -55,6 +55,34 @@ void random_coordinates(int *x, int *y) {
     *y = (rand() %(MAP_HEIGHT - 4 + 1)) + 4;
 }
 
+Point generate_random_position(Game *game) {
+    Point pos;
+    do {
+        pos.x = (rand() %(MAP_WIDTH - 4 + 1)) + 4;
+        pos.y = (rand() %(MAP_HEIGHT - 4 + 1)) + 4;
+    } while (game->map[pos.y][pos.x] != ' ');
+    return pos;
+}
+
+
+void spawn_treasure(Game *game, Treasure *treasure) {
+    Point pos = generate_random_position(game);
+    treasure->x = pos.x;
+    treasure->y = pos.y;
+    game->map[pos.y][pos.x] = treasure->type;
+}
+
+void check_and_respawn_treasure(Game *game, Player *player) {
+    char cell = game->map[player->y][player->x];
+    for (int i = 0; i < 10; i++) {
+        if (cell == game->treasure[i].type && player->x == game->treasure[i].x && player->y == game->treasure[i].y) {
+            player->carried_coins += game->treasure[i].amount;
+            spawn_treasure(game, &game->treasure[i]);
+            break;
+        }
+    }
+}
+
 bool is_valid_position(Game* game, int x, int y) {
     if (game->map[y][x] != ' ') {
         return false;
@@ -118,11 +146,23 @@ void init_players(Game* game) {
         game->players[i].isAssigned = false;
         game->players[i].next_move = NONE;
         game->players[i].is_alive = false;
+        game->players[i].carried_coins = 0;
+        game->players[i].deaths = 0;
         memset(game->players[i].fov_map, ' ', 5 * 5);
     }
 }
 
 
+void initialize_treasures(Game * game){
+    for (int i = 0; i < 2; i++) {
+        game->treasure[i] = (Treasure){'c', COIN, 0, 0};
+        spawn_treasure(game, &game->treasure[i]);
+        game->treasure[i + 2] = (Treasure){'t', TREASURE, 0, 0};
+        spawn_treasure(game, &game->treasure[i + 2]);
+        game->treasure[i + 4] = (Treasure){'T', CHEST, 0, 0};
+        spawn_treasure(game, &game->treasure[i + 4]);
+    }
+}
 
 void initialize_game_state(Game* game, const char * filename) {
 
@@ -142,6 +182,11 @@ void initialize_game_state(Game* game, const char * filename) {
         pthread_cond_init(&game->beast_cond, NULL);
         init_players(game);
         initialize_beasts(game);
+        initialize_treasures(game);
+        // Initialize and spawn 2 of each treasure type
+
+
+
         return;
     }
     printf("error with initialization!");
@@ -362,6 +407,7 @@ void beast_follow_player(int player_id, Game * game){
                 game->beast.current_pos.y == game->players[player_id].y){
             game->players[player_id].x =  game->players[player_id].spawn_x;
             game->players[player_id].y =  game->players[player_id].spawn_y;
+            game->players[player_id].deaths++;
         }
     }
 }
@@ -468,6 +514,11 @@ int update_map(Game * game){
         // Update the single beast's position on the map
         if(game->beast.isAssigned == TRUE){
             game->map[game->beast.current_pos.y][game->beast.current_pos.x] = '*';
+        }
+
+        // Update treasure positions on the map
+        for (int i = 0; i < 10; i++) {
+            game->map[game->treasure[i].y][game->treasure[i].x] = game->treasure[i].type;
         }
         return 0;
     }
@@ -625,7 +676,7 @@ void run_server() {
         return;
     }
 
-    initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/SO2/mapEmpty.txt");
+    initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/SO2/map.txt");
 
     if (sem_post(&game->sem) == -1) {
         perror("sem_post");
@@ -664,6 +715,13 @@ void run_server() {
 
         clear_positions_on_map(game);
         process_player_move_request(game);
+
+        //check treasures
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (game->players[i].isAssigned) {
+                check_and_respawn_treasure(game, &game->players[i]);
+            }
+        }
 
         update_map(game);
         update_fov(game);

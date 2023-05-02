@@ -40,5 +40,6 @@ int find_closest_player_id(Game * game);
 void print_map_debug(Game *game);
 void update_fov(Game * game);
 void draw_map(Game * game);
+void clear_positions_on_map(Game * game);
 
 #endif //SO2_SERVER_H

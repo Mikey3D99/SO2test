@@ -77,8 +77,11 @@ void copy_map(Game *game) {
 
 
 void draw_fov_map(Player *player) {
-    for (int y = 0; y < 5; y++) {
-        for (int x = 0; x < 5; x++) {
+    int FOV_HEIGHT = 5;
+    int FOV_WIDTH = 5;
+
+    for (int y = 0; y < FOV_HEIGHT; y++) {
+        for (int x = 0; x < FOV_WIDTH; x++) {
             char tile = player->fov_map[y][x];
             if (tile == 'W') {
                 mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
@@ -87,6 +90,12 @@ void draw_fov_map(Player *player) {
             }
         }
     }
+
+    // Display player information below the map
+    mvprintw(FOV_HEIGHT + 1, 0, "Coins: %d", player->carried_coins);
+    mvprintw(FOV_HEIGHT + 2, 0, "Deaths: %d", player->deaths);
+    mvprintw(FOV_HEIGHT + 3, 0, "X: %d", player->x);
+    mvprintw(FOV_HEIGHT + 4, 0, "Y: %d", player->y);
 }
 
 
