@@ -40,6 +40,8 @@ typedef struct Player {
     bool isAssigned;
     // Add other player attributes here, such as name, score, etc.
     MoveDirection next_move;
+    bool is_alive;
+    char fov_map[5][5];
 } Player;
 
 typedef struct Beast {

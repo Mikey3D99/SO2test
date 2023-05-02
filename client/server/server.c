@@ -117,6 +117,8 @@ void init_players(Game* game) {
         game->players[i].spawn_y = y;
         game->players[i].isAssigned = false;
         game->players[i].next_move = NONE;
+        game->players[i].is_alive = false;
+        memset(game->players[i].fov_map, ' ', 5 * 5);
     }
 }
 
@@ -339,7 +341,7 @@ void beast_follow_player(int player_id, Game * game){
                                      game->beast.current_pos.x,
                                      game->beast.current_pos.y, game, 7)){
 
-        printf("[BEAST][%d][%d]\n", game-> beast.current_pos.x, game->beast.current_pos.y);
+        //printf("[BEAST][%d][%d]\n", game-> beast.current_pos.x, game->beast.current_pos.y);
         // clean the spot
         game->map[game->beast.current_pos.y][game->beast.current_pos.x] = ' ';
 
@@ -396,13 +398,23 @@ void *beast_thread_func(void *arg) {
     return NULL;
 }
 
-void process_beasts(Game *game) {
-    if (game == NULL) {
-        return;
+void generate_player_fov_map(Game *game, Player *player) {
+    int player_x = player->x;
+    int player_y = player->y;
+
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
+            int map_x = player_x - 2 + x;
+            int map_y = player_y - 2 + y;
+
+            if (map_x >= 0 && map_x < MAP_WIDTH && map_y >= 0 && map_y < MAP_HEIGHT) {
+                player->fov_map[y][x] = game->map[map_y][map_x];
+            } else {
+                player->fov_map[y][x] = ' '; // Fill out-of-bounds areas with empty space
+            }
+        }
     }
 }
-
-
 
 void listen_to_client_connections(Game* game) {
     while(true){
@@ -421,6 +433,7 @@ void listen_to_client_connections(Game* game) {
 
                     //initialize new player
                     game->players[i].id = i;
+                    game->players[i].is_alive = true;
                 }
             }
 
@@ -459,6 +472,16 @@ int update_map(Game * game){
         return 0;
     }
     return -1;
+}
+
+void update_fov(Game * game){
+    if(game!= NULL){
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if(game->players[i].isAssigned == TRUE){
+                generate_player_fov_map(game, &game->players[i]);
+            }
+        }
+    }
 }
 
 
@@ -546,12 +569,14 @@ void run_server() {
     Game* game;
 
     // Initialize ncurses
-    //initscr();
-   // cbreak();
-    //noecho();
-    //keypad(stdscr, TRUE);
-    //curs_set(0);
-    // Initialize the mutex
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
 
 
     int shmid = create_and_attach_shared_memory(&game);
@@ -583,6 +608,9 @@ void run_server() {
     pthread_t beast_thread;
     pthread_create(&beast_thread, NULL, beast_behavior_thread, game);
 
+
+    pthread_t redraw_thread;
+    pthread_create(&redraw_thread, NULL, redraw_map_thread, game);
     //pthread_t redraw_thread;
    // err = pthread_create(&redraw_thread, NULL, redraw_map_thread, game);
    // if (err != 0) {
@@ -603,7 +631,8 @@ void run_server() {
         process_player_move_request(game);
 
         update_map(game);
-        print_map_debug(game);
+        update_fov(game);
+       // print_map_debug(game);
 
         if (sem_post(&game->sem) == -1) {
             perror("sem_post");
@@ -627,7 +656,7 @@ void run_server() {
             perror("pthread_mutex_unlock");
             break;
         }
-        printf("[BEAST][%d][%d]\n", game->beast.current_pos.x, game->beast.current_pos.y);
+        //printf("[BEAST][%d][%d]\n", game->beast.current_pos.x, game->beast.current_pos.y);
 
         sleep(1);
     }
@@ -645,5 +674,7 @@ void run_server() {
     destroy_semaphore(game);
     // Destroy the mutex before the program exits
     pthread_mutex_destroy(&game->mutex);
-    //endwin();
+    pthread_cancel(redraw_thread);
+    pthread_join(redraw_thread, NULL);
+    endwin();
 }

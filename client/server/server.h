@@ -38,5 +38,6 @@ bool is_move_allowed(Game * game, Player * player);
 char get_next_move_char(Game * game, Player * player);
 int find_closest_player_id(Game * game);
 void print_map_debug(Game *game);
+void update_fov(Game * game);
 
 #endif //SO2_SERVER_H

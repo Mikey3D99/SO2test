@@ -90,6 +90,24 @@ void draw_map() {
     }
 }
 
+void draw_fov_map(Player *player) {
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
+            char tile = player->fov_map[y][x];
+            if (tile == 'W') {
+                mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
+            } else {
+                mvaddch(y, x, tile);
+            }
+        }
+    }
+}
+
+
+typedef struct GameAndPlayer {
+    Game *game;
+    Player *player;
+} GameAndPlayer;
 
 
 void *redraw_map_thread(void *data) {
@@ -108,6 +126,29 @@ void *redraw_map_thread(void *data) {
         //print_map_debug_client();
         //erase();
         draw_map();
+        refresh();// Redraw every 100ms, adjust this value as needed
+    }
+}
+
+void *redraw_map_thread_client(void *data) {
+    GameAndPlayer *game_and_player = (GameAndPlayer *)data;
+    Game *game = game_and_player->game;
+    Player *player = game_and_player->player;
+    while (true) {
+        if (sem_wait(&game->sem_draw) == -1) {
+            perror("sem_wait");
+            break;
+        }
+        update_map(game);
+        copy_map(game);
+        if (sem_post(&game->sem_draw) == -1) {
+            perror("sem_post");
+            break;
+        }
+        //print_map_debug_client();
+        //erase();
+        update_fov(game);
+        draw_fov_map(player);
         refresh();// Redraw every 100ms, adjust this value as needed
     }
 }
@@ -143,12 +184,16 @@ void run_client() {
     int player_id = send_create_player_request(shared_game_memory);
     if(player_id < 0){
         printf("error creating a player");
-        return;
-    }
+        return;    }
+
+    GameAndPlayer game_and_player;
+    game_and_player.game = shared_game_memory;
+    game_and_player.player = &shared_game_memory->players[player_id];
 
     //printf("po wyslaniu rq");
     pthread_t redraw_thread;
-    pthread_create(&redraw_thread, NULL, redraw_map_thread, shared_game_memory);
+    pthread_create(&redraw_thread, NULL, redraw_map_thread_client, &game_and_player);
+
 
     //client loop
     int ch;
