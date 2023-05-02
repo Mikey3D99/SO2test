@@ -13,6 +13,11 @@ int initialize_semaphore(Game* game) {
         perror("sem_init");
         return -1;
     }
+
+    if (sem_init(&game->sem_draw, 1, 1) == -1) {
+        perror("sem_init");
+        return -1;
+    }
     return 0;
 }
 
@@ -21,6 +26,11 @@ void destroy_semaphore(Game* game) {
     if (sem_destroy(&game->sem) == -1) {
         perror("sem_destroy");
     }
+
+    if (sem_destroy(&game->sem_draw) == -1) {
+        perror("sem_destroy");
+    }
+
 }
 
 
@@ -329,7 +339,7 @@ void beast_follow_player(int player_id, Game * game){
                                      game->beast.current_pos.x,
                                      game->beast.current_pos.y, game, 7)){
 
-        printf("[BEAST][%d]\n", player_id);
+        printf("[BEAST][%d][%d]\n", game-> beast.current_pos.x, game->beast.current_pos.y);
         // clean the spot
         game->map[game->beast.current_pos.y][game->beast.current_pos.x] = ' ';
 
@@ -600,6 +610,12 @@ void run_server() {
             break;
         }
 
+        // Signal the client to draw the map
+        if (sem_post(&game->sem_draw) == -1) {
+            perror("sem_post");
+            break;
+        }
+
         if (pthread_mutex_lock(&game->mutex) != 0) {
             perror("pthread_mutex_lock");
             break;
@@ -611,9 +627,11 @@ void run_server() {
             perror("pthread_mutex_unlock");
             break;
         }
+        printf("[BEAST][%d][%d]\n", game->beast.current_pos.x, game->beast.current_pos.y);
 
         sleep(1);
     }
+
 
     //pthread_cancel(redraw_thread);
    // pthread_join(redraw_thread, NULL);

@@ -9,9 +9,10 @@
 #include "../constants/constants.h"
 
 
-void draw_map(Game * game);
+void draw_map();
 Player *create_player(int id, Game *game);
 void *redraw_map_thread(void *data);
 void run_client();
 int move_player(int ch, Player * player);
+void print_map_debug_client();
 #endif //SO2_PLAYER_H

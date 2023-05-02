@@ -61,6 +61,7 @@ typedef struct {
     char map[MAP_HEIGHT][MAP_WIDTH];
     int number_of_players;
     sem_t sem;
+    sem_t sem_draw;
     pthread_mutex_t mutex;
     pthread_cond_t beast_cond;
 } Game;

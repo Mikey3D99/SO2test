@@ -6,6 +6,8 @@
 #include "player.h"
 
 
+
+
 int send_create_player_request(Game * game){
     if(game == NULL)
         return -1;
@@ -62,38 +64,60 @@ int move_player(int ch, Player * player){
 }
 
 
-void draw_map(Game * game){
-    for (int y = 0; y < MAP_HEIGHT; y++){
-            for(int x = 0; x < MAP_WIDTH - 1; x++){
-                char tile = game->map[y][x];
-                if (tile == 'W'){
-                    mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
-                } else {
-                    mvaddch(y, x, tile);
-                }
-            }
+char map_buffer[MAP_HEIGHT][MAP_WIDTH];
+
+void copy_map(Game *game) {
+    for (int y = 0; y < MAP_HEIGHT; y++) {
+        for (int x = 0; x < MAP_WIDTH - 1; x++) {
+            map_buffer[y][x] = game->map[y][x];
+        }
+        map_buffer[y][MAP_WIDTH - 1] = '\0'; // Add a null terminator to the end of each row
     }
 }
+
+
+
+void draw_map() {
+    for (int y = 0; y < MAP_HEIGHT - 1; y++) {
+        for (int x = 0; x < MAP_WIDTH - 1; x++) {
+            char tile = map_buffer[y][x];
+            if (tile == 'W') {
+                mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
+            } else {
+                mvaddch(y, x, tile);
+            }
+        }
+    }
+}
+
 
 
 void *redraw_map_thread(void *data) {
-    Game *shared_data = (Game *)data;
+    Game *game = (Game *)data;
     while (true) {
-        if (sem_wait(&shared_data->sem) == -1) {
+        if (sem_wait(&game->sem_draw) == -1) {
             perror("sem_wait");
             break;
         }
-        draw_map(shared_data);
-        // Release the semaphore
-        if (sem_post(&shared_data->sem) == -1) {
+        update_map(game);
+        copy_map(game);
+        if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
             break;
         }
-        refresh();
-        // Redraw every 100ms, adjust this value as needed
+        //print_map_debug_client();
+        //erase();
+        draw_map();
+        refresh();// Redraw every 100ms, adjust this value as needed
     }
 }
 
+
+void print_map_debug_client() {
+    for (int i = 0; i < MAP_HEIGHT; i++) {
+            printf("%.*s\n", MAP_WIDTH, map_buffer[i]);
+    }
+}
 
 //TODO: dodaj semafor zeby przy zapisie do pamieci dzielonej (same wyslanie sygnalu) bylo zablokowane dla innych
 void run_client() {
@@ -103,6 +127,9 @@ void run_client() {
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
+
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
 
     Game * shared_game_memory = NULL;
     int memory_id;
@@ -143,8 +170,6 @@ void run_client() {
             perror("sem_post");
             break;
         }
-        // Update the screen, draw player, etc
-        refresh();
     }
 
     // Clean up and exit
