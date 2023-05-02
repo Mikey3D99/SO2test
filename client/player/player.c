@@ -76,20 +76,6 @@ void copy_map(Game *game) {
 }
 
 
-
-void draw_map() {
-    for (int y = 0; y < MAP_HEIGHT - 1; y++) {
-        for (int x = 0; x < MAP_WIDTH - 1; x++) {
-            char tile = map_buffer[y][x];
-            if (tile == 'W') {
-                mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
-            } else {
-                mvaddch(y, x, tile);
-            }
-        }
-    }
-}
-
 void draw_fov_map(Player *player) {
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
@@ -109,26 +95,6 @@ typedef struct GameAndPlayer {
     Player *player;
 } GameAndPlayer;
 
-
-void *redraw_map_thread(void *data) {
-    Game *game = (Game *)data;
-    while (true) {
-        if (sem_wait(&game->sem_draw) == -1) {
-            perror("sem_wait");
-            break;
-        }
-        update_map(game);
-        copy_map(game);
-        if (sem_post(&game->sem_draw) == -1) {
-            perror("sem_post");
-            break;
-        }
-        //print_map_debug_client();
-        //erase();
-        draw_map();
-        refresh();// Redraw every 100ms, adjust this value as needed
-    }
-}
 
 void *redraw_map_thread_client(void *data) {
     GameAndPlayer *game_and_player = (GameAndPlayer *)data;

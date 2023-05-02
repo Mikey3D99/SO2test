@@ -562,6 +562,41 @@ void *beast_behavior_thread(void *data) {
     return NULL;
 }
 
+void draw_map(Game * game) {
+
+    if(game == NULL)
+        return;
+
+    for (int y = 0; y < MAP_HEIGHT - 1; y++) {
+        for (int x = 0; x < MAP_WIDTH - 1; x++) {
+            char tile = game->map[y][x];
+            if (tile == 'W') {
+                mvaddch(y, x, '#' | A_BOLD | COLOR_PAIR(1));
+            } else {
+                mvaddch(y, x, tile);
+            }
+        }
+    }
+}
+
+void *redraw_map_thread(void *data) {
+    Game *game = (Game *)data;
+    while (true) {
+        if (sem_wait(&game->sem_draw) == -1) {
+            perror("sem_wait");
+            break;
+        }
+        draw_map(game);
+        if (sem_post(&game->sem_draw) == -1) {
+            perror("sem_post");
+            break;
+        }
+        //print_map_debug_client();
+        //erase();
+        refresh();// Redraw every 100ms, adjust this value as needed
+    }
+}
+
 
 
 
