@@ -147,6 +147,7 @@ void init_players(Game* game) {
         game->players[i].next_move = NONE;
         game->players[i].is_alive = false;
         game->players[i].carried_coins = 0;
+        game->players[i].brought_coins = 0;
         game->players[i].deaths = 0;
         memset(game->players[i].fov_map, ' ', 5 * 5);
     }
@@ -164,13 +165,15 @@ void initialize_treasures(Game * game){
     }
 }
 
+
+
 void initialize_game_state(Game* game, const char * filename) {
 
     if(game != NULL && filename != NULL){
         game->game_status = READY; // Example status: game is ready
         game->server_status = READY;
         game->number_of_players = 0;
-        memset(game->map, 'a', MAP_HEIGHT * MAP_WIDTH);
+        memset(game->map, '\0', MAP_HEIGHT * MAP_WIDTH);
         load_map(filename, game);
 
         for(int i = 0; i < MAP_HEIGHT; i++) {
@@ -183,7 +186,19 @@ void initialize_game_state(Game* game, const char * filename) {
         init_players(game);
         initialize_beasts(game);
         initialize_treasures(game);
-        // Initialize and spawn 2 of each treasure type
+
+        ///campsite
+        Point campsite = generate_random_position(game);
+        game->campsite_y = campsite.y;
+        game->campsite_x = campsite.x;
+
+        // Initialize coin drops
+        for(int i = 0; i < 5; i++){
+            game->drops[i].x = 0;
+            game->drops[i].y = 0;
+            game->drops[i].value = 0;
+            game->drops[i].used = false;
+        }
 
 
 
@@ -192,6 +207,47 @@ void initialize_game_state(Game* game, const char * filename) {
     printf("error with initialization!");
 }
 
+// Function to check collision between two players
+bool player_collision(Player *player1, Player *player2) {
+    return (player1->x == player2->x) && (player1->y == player2->y);
+}
+
+CoinDrop * create_coin_drop(int x, int y, int total , Game * game){
+    for(int i = 0; i < 5; i++){
+        if(game->drops[i].used == false){
+            game->drops[i].value = total;
+            game->drops[i].x = x;
+            game->drops[i].y = y;
+            game->drops->used = true;
+            return &game->drops[i];
+        }
+    }
+    return NULL;
+}
+
+// Function to handle collision and drop coins
+void handle_collision(Game *game, Player *player1, Player *player2) {
+    if (player_collision(player1, player2)) {
+        int total_coins = player1->carried_coins + player2->carried_coins;
+
+        // Assuming you have a CoinDrop struct with x, y and value properties
+        CoinDrop *drop = create_coin_drop(player1->x, player1->y, total_coins, game);
+        if(drop == NULL){
+            return;
+        }
+
+        // Reset player coins
+        player1->carried_coins = 0;
+        player2->carried_coins = 0;
+
+        //respawn them to original points
+        player1->x = player1->spawn_x;
+        player1->y = player1->spawn_y;
+        player2->x = player2->spawn_x;
+        player2->y = player2->spawn_y;
+
+    }
+}
 
 char get_next_move_char(Game * game, Player * player){
     char for_return = 'W';
@@ -249,7 +305,7 @@ int process_player_move_request(Game * game){
             if(game->players[i].isAssigned == true){
 
                 if(is_move_allowed(game, &game->players[i])){
-                    game->map[game->players[i].y][game->players[i].x] = ' ';
+                    //game->map[game->players[i].y][game->players[i].x] = ' ';
 
                     switch(game->players[i].next_move){
                         case UP:
@@ -388,7 +444,7 @@ void beast_follow_player(int player_id, Game * game){
 
         //printf("[BEAST][%d][%d]\n", game-> beast.current_pos.x, game->beast.current_pos.y);
         // clean the spot
-        game->map[game->beast.current_pos.y][game->beast.current_pos.x] = ' ';
+        //game->map[game->beast.current_pos.y][game->beast.current_pos.x] = ' ';
 
         int beast_x = game->beast.current_pos.x;
         int beast_y = game->beast.current_pos.y;
@@ -408,6 +464,7 @@ void beast_follow_player(int player_id, Game * game){
             game->players[player_id].x =  game->players[player_id].spawn_x;
             game->players[player_id].y =  game->players[player_id].spawn_y;
             game->players[player_id].deaths++;
+            /// TODO: dropped treasure from player has to be here
         }
     }
 }
@@ -506,6 +563,10 @@ void detach_and_remove_shared_memory(int shmid, Game* game) {
 ///TODO: delete fixed offset - players should spawn randomly
 int update_map(Game * game){
     if(game != NULL){
+
+        //clear before updating
+        clear_positions_on_map(game);
+
         for(int i = 0; i < MAX_PLAYERS; i++){
             if(game->players[i].isAssigned == TRUE){
                 game->map[game->players[i].y][game->players[i].x] = (char)('0' + game->players[i].id);
@@ -520,6 +581,15 @@ int update_map(Game * game){
         for (int i = 0; i < 10; i++) {
             game->map[game->treasure[i].y][game->treasure[i].x] = game->treasure[i].type;
         }
+
+        game->map[game->campsite_y][game->campsite_x] = 'A';
+
+        for(int i = 0; i < 5; i++){
+            if(game->drops[i].used){
+                game->map[game->drops[i].y][game->drops[i].x] = 'D';
+            }
+        }
+
         return 0;
     }
     return -1;
@@ -557,19 +627,19 @@ Game* connect_to_shared_memory(int* shmid) {
 /// klienta aby serwer mogl updatowac mape w jednej turze
 /// dla wszystkich klientow
 
-void clear_positions_on_map(Game * game){
-    if(game != NULL){
-        for(int i = 0; i < MAX_PLAYERS; i++){
-            if(game->players[i].isAssigned == TRUE){
-                game->map[game->players[i].y][game->players[i].x] = ' ';
+void clear_positions_on_map(Game * game) {
+    if (game != NULL) {
+        for (int y = 0; y < MAP_HEIGHT; y++) {
+            for (int x = 0; x < MAP_WIDTH; x++) {
+                // If the current cell is not a wall, set it to a space character
+                if (game->map[y][x] != 'W') {
+                    game->map[y][x] = ' ';
+                }
             }
-        }
-        // Clear the single beast's position on the map
-        if(game->beast.isAssigned == TRUE){
-            game->map[game->beast.current_pos.y][game->beast.current_pos.x] = ' ';
         }
     }
 }
+
 
 void print_map_debug(Game *game) {
     if (game != NULL) {
@@ -618,7 +688,7 @@ void draw_map(Game * game) {
     if(game == NULL)
         return;
 
-    for (int y = 0; y < MAP_HEIGHT - 1; y++) {
+    for (int y = 1; y < MAP_HEIGHT - 1; y++) {
         for (int x = 0; x < MAP_WIDTH - 1; x++) {
             char tile = game->map[y][x];
             if (tile == 'W') {
@@ -702,7 +772,7 @@ void run_server() {
    // if (err != 0) {
     //    perror("pthread_create: redraw_thread");
    //     exit(1);
-   // }
+  // }
 
     // Create beast threads
    // process_beasts(game);
@@ -713,19 +783,50 @@ void run_server() {
             break;
         }
 
-        clear_positions_on_map(game);
         process_player_move_request(game);
 
         //check treasures
         for (int i = 0; i < MAX_PLAYERS; i++) {
             if (game->players[i].isAssigned) {
                 check_and_respawn_treasure(game, &game->players[i]);
+                ///check if players are at campsite
+                if(game->players[i].x == game->campsite_x && game->players[i].y == game->campsite_y){
+                    game->players[i].brought_coins += game->players[i].carried_coins;
+                    game->players[i].carried_coins = 0;
+                }
             }
         }
 
+       /* //check for player collisions
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (game->players[i].isAssigned) {
+                for(int j = 0; j < MAX_PLAYERS; j++)
+                    if (game->players[i].isAssigned) {
+                        if(player_collision(&game->players[i], &game->players[j])){
+                            handle_collision(game, &game->players[i], &game->players[j]);
+                    }
+                }
+            }
+        }
+
+        //check if players picked up coin drops
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (game->players[i].isAssigned) {
+                for(int j = 0; j < 5; j++){
+                    if(game->drops[j].used){
+                        if(game->players[i].x == game->drops[j].x && game->players[i].y == game->drops[j].y){
+                            game->players[i].carried_coins += game->drops[j].value;
+                            game->drops[j].value = 0;
+                            game->drops[j].used = false;
+                        }
+                    }
+                }
+            }
+        }*/
+
         update_map(game);
         update_fov(game);
-       // print_map_debug(game);
+        //print_map_debug(game);
 
         if (sem_post(&game->sem) == -1) {
             perror("sem_post");
@@ -751,9 +852,9 @@ void run_server() {
         }
         //printf("[BEAST][%d][%d]\n", game->beast.current_pos.x, game->beast.current_pos.y);
 
-        sleep(1);
-    }
+        usleep(500000);
 
+    }
 
     //pthread_cancel(redraw_thread);
    // pthread_join(redraw_thread, NULL);
@@ -769,5 +870,5 @@ void run_server() {
     pthread_mutex_destroy(&game->mutex);
     pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
-    endwin();
+    //endwin();
 }

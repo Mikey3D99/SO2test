@@ -52,6 +52,7 @@ typedef struct Player {
     char fov_map[5][5];
     int carried_coins;
     int deaths;
+    int brought_coins;
 } Player;
 
 typedef struct Beast {
@@ -64,6 +65,13 @@ typedef struct Beast {
     bool allow_move;
 } Beast;
 
+typedef struct CoinDrop{
+    int value;
+    int x;
+    int y;
+    bool used;
+
+}CoinDrop;
 
 typedef struct {
     int game_status;
@@ -77,6 +85,9 @@ typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t beast_cond;
     Treasure treasure[10];
+    CoinDrop drops[5];
+    int campsite_x;
+    int campsite_y;
 } Game;
 
 void load_map(const char * filename, Game * game);

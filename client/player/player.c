@@ -92,10 +92,11 @@ void draw_fov_map(Player *player) {
     }
 
     // Display player information below the map
-    mvprintw(FOV_HEIGHT + 1, 0, "Coins: %d", player->carried_coins);
-    mvprintw(FOV_HEIGHT + 2, 0, "Deaths: %d", player->deaths);
-    mvprintw(FOV_HEIGHT + 3, 0, "X: %d", player->x);
-    mvprintw(FOV_HEIGHT + 4, 0, "Y: %d", player->y);
+    mvprintw(FOV_HEIGHT + 1, 0, "Coins: %03d", player->carried_coins);
+    mvprintw(FOV_HEIGHT + 2, 0, "Brought: %03d", player->brought_coins);
+    mvprintw(FOV_HEIGHT + 3, 0, "Deaths: %02d", player->deaths);
+    mvprintw(FOV_HEIGHT + 4, 0, "X: %02d", player->x);
+    mvprintw(FOV_HEIGHT + 5, 0, "Y: %02d", player->y);
 }
 
 
