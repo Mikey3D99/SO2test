@@ -62,20 +62,6 @@ int move_player(int ch, Player * player){
     }
     return 0;
 }
-
-
-char map_buffer[MAP_HEIGHT][MAP_WIDTH];
-
-void copy_map(Game *game) {
-    for (int y = 0; y < MAP_HEIGHT; y++) {
-        for (int x = 0; x < MAP_WIDTH - 1; x++) {
-            map_buffer[y][x] = game->map[y][x];
-        }
-        map_buffer[y][MAP_WIDTH - 1] = '\0'; // Add a null terminator to the end of each row
-    }
-}
-
-
 void draw_fov_map(Player *player) {
     int FOV_HEIGHT = 5;
     int FOV_WIDTH = 5;
@@ -115,9 +101,8 @@ void *redraw_map_thread_client(void *data) {
             perror("sem_wait");
             break;
         }
-        update_map(game);
-        copy_map(game);
-        update_fov(game);
+        //update_map(game);
+        //update_fov(game);
         draw_fov_map(player);
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
@@ -126,13 +111,6 @@ void *redraw_map_thread_client(void *data) {
         //print_map_debug_client();
         //erase();
         refresh();// Redraw every 100ms, adjust this value as needed
-    }
-}
-
-
-void print_map_debug_client() {
-    for (int i = 0; i < MAP_HEIGHT; i++) {
-            printf("%.*s\n", MAP_WIDTH, map_buffer[i]);
     }
 }
 

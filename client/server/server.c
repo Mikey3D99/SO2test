@@ -707,6 +707,8 @@ void *redraw_map_thread(void *data) {
             perror("sem_wait");
             break;
         }
+        //update_map(game);
+        //update_fov(game);
         draw_map(game);
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
