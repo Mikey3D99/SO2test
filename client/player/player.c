@@ -117,14 +117,14 @@ void *redraw_map_thread_client(void *data) {
         }
         update_map(game);
         copy_map(game);
+        update_fov(game);
+        draw_fov_map(player);
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
             break;
         }
         //print_map_debug_client();
         //erase();
-        update_fov(game);
-        draw_fov_map(player);
         refresh();// Redraw every 100ms, adjust this value as needed
     }
 }

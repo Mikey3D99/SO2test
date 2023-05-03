@@ -870,5 +870,5 @@ void run_server() {
     pthread_mutex_destroy(&game->mutex);
     pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
-    //endwin();
+    endwin();
 }
