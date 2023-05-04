@@ -230,22 +230,23 @@ void handle_collision(Game *game, Player *player1, Player *player2) {
     if (player_collision(player1, player2)) {
         int total_coins = player1->carried_coins + player2->carried_coins;
 
-        // Assuming you have a CoinDrop struct with x, y and value properties
-        CoinDrop *drop = create_coin_drop(player1->x, player1->y, total_coins, game);
-        if(drop == NULL){
-            return;
+        if(total_coins > 0){
+            // Assuming you have a CoinDrop struct with x, y and value properties
+            CoinDrop *drop = create_coin_drop(player1->x, player1->y, total_coins, game);
+            if(drop == NULL){
+                return;
+            }
+
+            // Reset player coins
+            player1->carried_coins = 0;
+            player2->carried_coins = 0;
+
+            //respawn them to original points
+            player1->x = player1->spawn_x;
+            player1->y = player1->spawn_y;
+            player2->x = player2->spawn_x;
+            player2->y = player2->spawn_y;
         }
-
-        // Reset player coins
-        player1->carried_coins = 0;
-        player2->carried_coins = 0;
-
-        //respawn them to original points
-        player1->x = player1->spawn_x;
-        player1->y = player1->spawn_y;
-        player2->x = player2->spawn_x;
-        player2->y = player2->spawn_y;
-
     }
 }
 
@@ -428,6 +429,12 @@ int find_closest_player_id(Game * game){
 
 
 
+void respawn_beast(Game * game){
+    Point pos = generate_random_position(game);
+    game->beast.current_pos.x = pos.x;
+    game->beast.current_pos.y = pos.y;
+}
+
 // byc moze tutaj osobny watek aby bestia patrzyla caly czas czy jakis gracz nie wszedl w jej sight
 void beast_follow_player(int player_id, Game * game){
     if(game == NULL){
@@ -461,10 +468,14 @@ void beast_follow_player(int player_id, Game * game){
         }
         if(game->beast.current_pos.x == game->players[player_id].x &&
                 game->beast.current_pos.y == game->players[player_id].y){
+            create_coin_drop(game->players[player_id].x,game->players[player_id].y, game->players[player_id].carried_coins, game);
+            game->players[player_id].carried_coins = 0;
             game->players[player_id].x =  game->players[player_id].spawn_x;
             game->players[player_id].y =  game->players[player_id].spawn_y;
             game->players[player_id].deaths++;
-            /// TODO: dropped treasure from player has to be here
+            /// TODO: respawn beast somewhere else
+            respawn_beast(game);
+
         }
     }
 }
@@ -799,11 +810,11 @@ void run_server() {
             }
         }
 
-       /* //check for player collisions
+        //check for player collisions
         for (int i = 0; i < MAX_PLAYERS; i++) {
             if (game->players[i].isAssigned) {
                 for(int j = 0; j < MAX_PLAYERS; j++)
-                    if (game->players[i].isAssigned) {
+                    if (game->players[j].isAssigned && j != i) {
                         if(player_collision(&game->players[i], &game->players[j])){
                             handle_collision(game, &game->players[i], &game->players[j]);
                     }
@@ -824,7 +835,7 @@ void run_server() {
                     }
                 }
             }
-        }*/
+        }
 
         update_map(game);
         update_fov(game);
