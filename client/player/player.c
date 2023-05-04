@@ -146,19 +146,30 @@ void run_client() {
     ///Send create player request
     int player_id = send_create_player_request(shared_game_memory);
     if(player_id < 0){
-        mvprintw(1, 0, "error creating a player");
+        mvprintw(1, 0, "Error creating a player.");
         refresh();
         return;    }
 
     GameAndPlayer game_and_player;
+
+
+   ///ACCESSING SHARED MEMORY
+    if (sem_wait(&shared_game_memory->sem) == -1) {
+        perror("sem_wait");
+        return;
+    }
     game_and_player.game = shared_game_memory;
     game_and_player.player = &shared_game_memory->players[player_id];
+
+    // Release the semaphore
+    if (sem_post(&shared_game_memory->sem) == -1) {
+        perror("sem_post");
+        return;
+    }
 
     //printf("po wyslaniu rq");
     pthread_t redraw_thread;
     pthread_create(&redraw_thread, NULL, redraw_map_thread_client, &game_and_player);
-
-
 
 
     int ch;

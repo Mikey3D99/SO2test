@@ -577,6 +577,7 @@ void listen_to_client_connections(Game* game) {
             break;
         }
     }
+    printf("\nCLIENT CONNECTION LISTENER CLOSED\n");
 }
 
 
@@ -640,14 +641,12 @@ void update_fov(Game * game){
 Game* connect_to_shared_memory(int* shmid) {
     *shmid = shmget(SHM_KEY, SHM_SIZE, 0666);
     if (*shmid < 0) {
-        perror("shmget");
-        exit(1);
+        return NULL;
     }
 
     Game* game = (Game*)shmat(*shmid, NULL, 0);
     if (game == (Game*)-1) {
-        perror("shmat");
-        exit(1);
+        return NULL;
     }
 
     return game;
@@ -713,6 +712,7 @@ void *beast_behavior_thread(void *data) {
             break;
         }
     }
+    printf("\nBEAST BEHAVIOR THREAD CLOSED\n");
     return NULL;
 }
 
@@ -760,6 +760,7 @@ void *redraw_map_thread(void *data) {
         //erase();
         refresh();// Redraw every 100ms, adjust this value as needed
     }
+    printf("\nREDRAW THREAD CLOSED\n");
     return NULL;
 }
 
@@ -812,6 +813,7 @@ void *keyboard_listener(void *arg) {
             }
         }
     }
+    printf("\nKEYBOARD LISTENER CLOSED\n");
     return NULL;
 }
 
