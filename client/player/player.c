@@ -4,6 +4,10 @@
 #include <malloc.h>
 #include <pthread.h>
 #include "player.h"
+#include <unistd.h>
+#include <sys/types.h>
+#include <signal.h>
+
 
 
 
@@ -20,6 +24,7 @@ int send_create_player_request(Game * game){
 
     int id = game->number_of_players;
     game->players[id].isAssigned = true;
+    game->players[id].client_pid = getpid();
 
 
     // Release the semaphore
@@ -114,6 +119,7 @@ void *redraw_map_thread_client(void *data) {
     }
 }
 
+
 //TODO: dodaj semafor zeby przy zapisie do pamieci dzielonej (same wyslanie sygnalu) bylo zablokowane dla innych
 void run_client() {
     // Initialize ncurses
@@ -129,15 +135,19 @@ void run_client() {
     Game * shared_game_memory = NULL;
     int memory_id;
     shared_game_memory = connect_to_shared_memory(&memory_id);
+
     if(shared_game_memory == NULL){
-        printf("error memri");
+        mvprintw(1, 0, "SHARED MEMORY HAS NOT BEEN CREATED YET");
+        mvprintw(2, 0, "SERVER NOT RUNNING");
+        refresh();
         return;
     }
 
     ///Send create player request
     int player_id = send_create_player_request(shared_game_memory);
     if(player_id < 0){
-        printf("error creating a player");
+        mvprintw(1, 0, "error creating a player");
+        refresh();
         return;    }
 
     GameAndPlayer game_and_player;
@@ -149,21 +159,31 @@ void run_client() {
     pthread_create(&redraw_thread, NULL, redraw_map_thread_client, &game_and_player);
 
 
-    //client loop
+
+
     int ch;
     while (true) { // Exit the loop when the 'q' key is pressed
         ch = getch();
         if (ch == 'q') {
             break;
         }
+
         // Wait for the semaphore
         if (sem_wait(&shared_game_memory->sem) == -1) {
             perror("sem_wait");
             break;
         }
-        if(&shared_game_memory->players[player_id] != NULL ){
-            move_player(ch, &shared_game_memory->players[player_id]);
+
+        // Check if the server process is still running
+        if (shared_game_memory->server_pid != 0 && kill(shared_game_memory->server_pid, 0) == 0) {
+            if (&shared_game_memory->players[player_id] != NULL) {
+                move_player(ch, &shared_game_memory->players[player_id]);
+            }
+        } else {
+            mvprintw(1, 0, "SERVER NOT RUNNING");
+            refresh();
         }
+
         // Release the semaphore
         if (sem_post(&shared_game_memory->sem) == -1) {
             perror("sem_post");

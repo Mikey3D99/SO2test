@@ -11,7 +11,7 @@
 #define MAP_WIDTH 50
 #define MAP_HEIGHT 21
 #define MAX_PLAYERS 4
-#define SHM_KEY 1234
+#define SHM_KEY 1249
 #define SHM_SIZE 2048
 #define READY 1
 #define MOVED 2
@@ -53,6 +53,7 @@ typedef struct Player {
     int carried_coins;
     int deaths;
     int brought_coins;
+    pid_t client_pid;
 } Player;
 
 typedef struct Beast {
@@ -75,6 +76,9 @@ typedef struct CoinDrop{
 
 typedef struct {
     int game_status;
+    pid_t server_pid;
+    bool respawn_beast;
+    bool respawn_coins;
     int server_status;
     Player players[MAX_PLAYERS];
     Beast beast;
@@ -84,6 +88,7 @@ typedef struct {
     sem_t sem_draw;
     pthread_mutex_t mutex;
     pthread_cond_t beast_cond;
+    pthread_cond_t game_end_cond;
     Treasure treasure[10];
     CoinDrop drops[5];
     int campsite_x;

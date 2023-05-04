@@ -16,6 +16,7 @@ int initialize_semaphore(Game* game) {
 
     if (sem_init(&game->sem_draw, 1, 1) == -1) {
         perror("sem_init");
+        sem_destroy(&game->sem);
         return -1;
     }
     return 0;
@@ -30,7 +31,6 @@ void destroy_semaphore(Game* game) {
     if (sem_destroy(&game->sem_draw) == -1) {
         perror("sem_destroy");
     }
-
 }
 
 
@@ -51,15 +51,15 @@ int create_and_attach_shared_memory(Game** game) {
 }
 
 void random_coordinates(int *x, int *y) {
-    *x = (rand() %(MAP_WIDTH - 4 + 1)) + 4;
-    *y = (rand() %(MAP_HEIGHT - 4 + 1)) + 4;
+    *x =  (rand() % (MAP_WIDTH - 5)) + 2;
+    *y = (rand() % (MAP_HEIGHT - 5)) + 2;
 }
 
 Point generate_random_position(Game *game) {
     Point pos;
     do {
-        pos.x = (rand() %(MAP_WIDTH - 4 + 1)) + 4;
-        pos.y = (rand() %(MAP_HEIGHT - 4 + 1)) + 4;
+        pos.x = (rand() % (MAP_WIDTH - 5)) + 2;
+        pos.y = (rand() % (MAP_HEIGHT - 5)) + 2;
     } while (game->map[pos.y][pos.x] != ' ');
     return pos;
 }
@@ -80,6 +80,12 @@ void check_and_respawn_treasure(Game *game, Player *player) {
             spawn_treasure(game, &game->treasure[i]);
             break;
         }
+    }
+}
+
+void respawn_treasure(Game * game){
+    for(int i = 0; i < 10; i++){
+        spawn_treasure(game, &game->treasure[i]);
     }
 }
 
@@ -149,6 +155,7 @@ void init_players(Game* game) {
         game->players[i].carried_coins = 0;
         game->players[i].brought_coins = 0;
         game->players[i].deaths = 0;
+        game->players[i].client_pid = 0;
         memset(game->players[i].fov_map, ' ', 5 * 5);
     }
 }
@@ -162,6 +169,10 @@ void initialize_treasures(Game * game){
         spawn_treasure(game, &game->treasure[i + 2]);
         game->treasure[i + 4] = (Treasure){'T', CHEST, 0, 0};
         spawn_treasure(game, &game->treasure[i + 4]);
+        game->treasure[i + 6] = (Treasure){'c', COIN, 0, 0};
+        spawn_treasure(game, &game->treasure[i]);
+        game->treasure[i + 8] = (Treasure){'t', TREASURE, 0, 0};
+        spawn_treasure(game, &game->treasure[i + 2]);
     }
 }
 
@@ -172,6 +183,9 @@ void initialize_game_state(Game* game, const char * filename) {
     if(game != NULL && filename != NULL){
         game->game_status = READY; // Example status: game is ready
         game->server_status = READY;
+        game->respawn_coins = false;
+        game->respawn_beast = false;
+        game->server_pid = getpid();
         game->number_of_players = 0;
         memset(game->map, '\0', MAP_HEIGHT * MAP_WIDTH);
         load_map(filename, game);
@@ -183,6 +197,7 @@ void initialize_game_state(Game* game, const char * filename) {
         // AFTER LOADING MAP
         pthread_mutex_init(&game->mutex, NULL);
         pthread_cond_init(&game->beast_cond, NULL);
+        pthread_cond_init(&game->game_end_cond, NULL);
         init_players(game);
         initialize_beasts(game);
         initialize_treasures(game);
@@ -531,14 +546,16 @@ void generate_player_fov_map(Game *game, Player *player) {
 }
 
 void listen_to_client_connections(Game* game) {
-    while(true){
-        if (game->server_status == READY && game != NULL){
-            fflush(stdout);
 
-            if (sem_wait(&game->sem) == -1) {
-                perror("sem_wait");
-                break;
-            }
+    while(true){
+
+        if (sem_wait(&game->sem) == -1) {
+            perror("sem_wait");
+            break;
+        }
+
+        if (game->server_status == READY){
+            fflush(stdout);
 
             // client sent a request for creating a player. The server has to constantly look for this request.
             for(int i = game->number_of_players; i < MAX_PLAYERS; i++){
@@ -550,12 +567,14 @@ void listen_to_client_connections(Game* game) {
                     game->players[i].is_alive = true;
                 }
             }
-
-            // Release the semaphore
-            if (sem_post(&game->sem) == -1) {
-                perror("sem_post");
-                break;
-            }
+        }
+        if(game->server_status == GAME_END){
+            break;
+        }
+        // Release the semaphore
+        if (sem_post(&game->sem) == -1) {
+            perror("sem_post");
+            break;
         }
     }
 }
@@ -679,6 +698,10 @@ void *beast_behavior_thread(void *data) {
 
         beast_follow_player(find_closest_player_id(game), game);
 
+        if(game->server_status == GAME_END){
+            break;
+        }
+
         if (sem_post(&game->sem) == -1) {
             perror("sem_post");
             pthread_mutex_unlock(&game->mutex);
@@ -690,7 +713,6 @@ void *beast_behavior_thread(void *data) {
             break;
         }
     }
-
     return NULL;
 }
 
@@ -709,6 +731,10 @@ void draw_map(Game * game) {
             }
         }
     }
+    // Display player information below the map
+    mvprintw(MAP_HEIGHT + 1, 0, "Server status: %d", game->server_status);
+    mvprintw(MAP_HEIGHT + 2, 0, "Respawn beast: %d", game->respawn_beast);
+    mvprintw(MAP_HEIGHT + 3, 0, "Respawn coins: %d", game->respawn_coins);
 }
 
 void *redraw_map_thread(void *data) {
@@ -721,6 +747,11 @@ void *redraw_map_thread(void *data) {
         //update_map(game);
         //update_fov(game);
         draw_map(game);
+
+        if(game->server_status == GAME_END){
+            refresh();
+            return NULL;
+        }
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
             break;
@@ -729,12 +760,63 @@ void *redraw_map_thread(void *data) {
         //erase();
         refresh();// Redraw every 100ms, adjust this value as needed
     }
+    return NULL;
 }
 
 
+void *keyboard_listener(void *arg) {
+    Game *game = (Game *)arg;
+
+    while (1) {
+        int ch = getchar();
+        if (ch == 'q') {
+            if (sem_wait(&game->sem) == -1) {
+                perror("sem_wait");
+                break;
+            }
+
+            game->server_status = GAME_END;
+
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                break;
+            }
+
+            break;
+        }
+        else if(ch == 'c' || ch == 't' || ch == 'T'){
+            if (sem_wait(&game->sem) == -1) {
+                perror("sem_wait");
+                break;
+            }
+
+            game->respawn_coins = true;
+
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                break;
+            }
+
+        }
+        else if(ch == 'b' || ch == 'B'){
+            if (sem_wait(&game->sem) == -1) {
+                perror("sem_wait");
+                break;
+            }
+
+            game->respawn_beast = true;
+
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                break;
+            }
+        }
+    }
+    return NULL;
+}
 
 
-void run_server() {
+int run_server() {
     Game* game;
 
     // Initialize ncurses
@@ -750,51 +832,116 @@ void run_server() {
 
     int shmid = create_and_attach_shared_memory(&game);
     if (shmid < 0) {
-        exit(1);
+        clear();
+        mvprintw(1, 0, "Error creating shared memory");
+        refresh();
+        endwin(); // Move this line before printing the message
+        return 0;
     }
-    initialize_semaphore(game);
+
+    int ret = initialize_semaphore(game);
+    if(ret == -1){
+        clear();
+        mvprintw(1, 0, "Error initializing semaphores");
+        refresh();
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
+    }
+    /// --------------------------------
 
     if (sem_wait(&game->sem) == -1) {
-        perror("sem_wait");
-        return;
+        clear();
+        mvprintw(1, 0, "Error with sem_wait in run_server:849");
+        refresh();
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
     }
 
-    initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/SO2/map.txt");
+    initialize_game_state(game, "/mnt/c/Users/wlodi/CLionProjects/mamdosc/mapEmpty.txt");
 
     if (sem_post(&game->sem) == -1) {
-        perror("sem_post");
-        return;
+        clear();
+        mvprintw(1, 0, "Error with sem_post in run_server:862");
+        refresh();
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
     }
-
+    /// ---------------------------------
     pthread_t client_requests_thread;
     int err = pthread_create(&client_requests_thread, NULL, (void *) listen_to_client_connections, game);
     if (err != 0) {
-        perror("pthread_create: client_requests_thread");
-        exit(1);
+        clear();
+        mvprintw(1, 0, "pthread_create: client_requests_thread run_server:874");
+        refresh();
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
     }
 
-    // Before entering the server loop
     pthread_t beast_thread;
-    pthread_create(&beast_thread, NULL, beast_behavior_thread, game);
-
+    err = pthread_create(&beast_thread, NULL, beast_behavior_thread, game);
+    if (err != 0) {
+        clear();
+        mvprintw(1, 0, "beast thread");
+        refresh();
+        //cancel client listener
+        pthread_cancel(client_requests_thread);
+        pthread_join(client_requests_thread, NULL);
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
+    }
 
     pthread_t redraw_thread;
-    pthread_create(&redraw_thread, NULL, redraw_map_thread, game);
-    //pthread_t redraw_thread;
-   // err = pthread_create(&redraw_thread, NULL, redraw_map_thread, game);
-   // if (err != 0) {
-    //    perror("pthread_create: redraw_thread");
-   //     exit(1);
-  // }
+    err = pthread_create(&redraw_thread, NULL, redraw_map_thread, game);
+    if (err != 0) {
+        clear();
+        mvprintw(1, 0, "pthread_create: redraw_thread run_server:901");
+        refresh();
+        //cancel beast thread
+        pthread_cancel(beast_thread);
+        pthread_join(beast_thread, NULL);
+        //cancel client request thread
+        pthread_cancel(client_requests_thread);
+        pthread_join(client_requests_thread, NULL);
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
+    }
 
-    // Create beast threads
-   // process_beasts(game);
+    pthread_t keyboard_listener_thread;
+    if (pthread_create(&keyboard_listener_thread, NULL, keyboard_listener, (void *)game) != 0) {
+        clear();
+        mvprintw(1, 0, "pthread_create: client_requests_thread run_server:874");
+        refresh();
+        //cancel beast thread
+        pthread_cancel(beast_thread);
+        pthread_join(beast_thread, NULL);
+        pthread_cancel(client_requests_thread);
+        pthread_join(client_requests_thread, NULL);
+        pthread_cancel(redraw_thread);
+        pthread_join(redraw_thread, NULL);
+        destroy_semaphore(game);
+        detach_and_remove_shared_memory(shmid, game);
+        endwin(); // Move this line before printing the message
+        return 0;
+    }
 
+    ///TODO: zabezpieczenia i uwalnianie rzeczy
     while (1) {
         if (sem_wait(&game->sem) == -1) {
             perror("sem_wait");
             break;
         }
+
 
         process_player_move_request(game);
 
@@ -837,6 +984,36 @@ void run_server() {
             }
         }
 
+        if (pthread_mutex_lock(&game->mutex) != 0) {
+            perror("pthread_mutex_lock");
+            break;
+        }
+
+        if (game->server_status == GAME_END) {
+            if (pthread_mutex_unlock(&game->mutex) != 0) {
+                perror("pthread_mutex_unlock");
+                break;
+            }
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                break;
+            }
+            break;
+        }
+        else if(game->respawn_beast){
+            game->respawn_beast = false;
+            respawn_beast(game);
+        }
+        else if(game->respawn_coins){
+            game->respawn_coins = false;
+            respawn_treasure(game);
+        }
+
+        if (pthread_mutex_unlock(&game->mutex) != 0) {
+            perror("pthread_mutex_unlock");
+            break;
+        }
+
         update_map(game);
         update_fov(game);
         //print_map_debug(game);
@@ -863,25 +1040,41 @@ void run_server() {
             perror("pthread_mutex_unlock");
             break;
         }
-        //printf("[BEAST][%d][%d]\n", game->beast.current_pos.x, game->beast.current_pos.y);
-
         usleep(500000);
-
     }
 
-    //pthread_cancel(redraw_thread);
-   // pthread_join(redraw_thread, NULL);
-
     // Before exiting the server
+    clear();
+    mvprintw(MAP_HEIGHT + 7, 0, "GAME ENDED QUITING...");
+    refresh();
+
+    //cancel keyboard listener
+    pthread_cancel(keyboard_listener_thread);
+    pthread_join(keyboard_listener_thread, NULL);
+
+    //cancel beast thread
     pthread_cancel(beast_thread);
     pthread_join(beast_thread, NULL);
-    pthread_join(client_requests_thread, NULL);
-    game->server_status = 0;
-    detach_and_remove_shared_memory(shmid, game);
-    destroy_semaphore(game);
-    // Destroy the mutex before the program exits
-    pthread_mutex_destroy(&game->mutex);
+
+    //cancel redraw thread
     pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
-    endwin();
+
+    //cancel client listener
+    pthread_cancel(client_requests_thread);
+    pthread_join(client_requests_thread, NULL);
+
+
+    // Destroy the mutex before the program exits
+    destroy_semaphore(game);
+    pthread_mutex_destroy(&game->mutex);
+    pthread_cond_destroy(&game->game_end_cond);
+    pthread_cond_destroy(&game->beast_cond);
+    //destroy shared memory
+    detach_and_remove_shared_memory(shmid, game);
+
+
+    endwin(); // Move this line after printing the message and refreshing the screen
+
+    return 0;
 }

@@ -20,7 +20,7 @@ int create_and_attach_shared_memory(Game** game);
 void initialize_game_state(Game* game, const char * filename);
 void listen_to_client_connections(Game* game);
 void detach_and_remove_shared_memory(int shmid, Game* game);
-void run_server();
+int run_server();
 void random_coordinates(int *x, int *y);
 bool is_valid_position(Game* game, int x, int y);
 bool is_player_obstructed_by_wall_and_in_range(int player_x, int player_y, int beast_x, int beast_y, Game * game, int range);
