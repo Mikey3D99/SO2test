@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include <signal.h>
 
 // 1 pshared - share semaphore among processes; 1 - initial value
 int initialize_semaphore(Game* game) {
@@ -557,11 +558,27 @@ void listen_to_client_connections(Game* game) {
         if (game->server_status == READY){
             fflush(stdout);
 
+            for(int j = 0; j < MAX_PLAYERS; j++ ){
+                if(game->players[j].isAssigned == true){
+                    ///send kill signal with flag to not kill to check if a client is running
+                    if(kill(game->players[j].client_pid, 0) != 0){
+                        //free the spot
+                        game->players[j].isAssigned = false;
+                        game->players[j].carried_coins = 0;
+                        game->players[j].client_pid = 0;
+                        game->players[j].brought_coins = 0;
+                        game->players[j].deaths = 0;
+                        game->players[j].is_alive = false;
+                        --game->number_of_players;
+                    }
+                }
+
+            }
+
             // client sent a request for creating a player. The server has to constantly look for this request.
             for(int i = game->number_of_players; i < MAX_PLAYERS; i++){
                 if(game->players[i].isAssigned == true){
                     game->number_of_players++; // increment player count
-
                     //initialize new player
                     game->players[i].id = i;
                     game->players[i].is_alive = true;
@@ -578,6 +595,18 @@ void listen_to_client_connections(Game* game) {
         }
     }
     printf("\nCLIENT CONNECTION LISTENER CLOSED\n");
+}
+
+int find_free_spot(Game * game){
+    if(game == NULL){
+        return -1;
+    }
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(!game->players[i].isAssigned){
+            return i;
+        }
+    }
+    return -1;
 }
 
 
@@ -735,6 +764,11 @@ void draw_map(Game * game) {
     mvprintw(MAP_HEIGHT + 1, 0, "Server status: %d", game->server_status);
     mvprintw(MAP_HEIGHT + 2, 0, "Respawn beast: %d", game->respawn_beast);
     mvprintw(MAP_HEIGHT + 3, 0, "Respawn coins: %d", game->respawn_coins);
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        mvprintw(MAP_HEIGHT + 4 + i, 0, "Client_%d PID: %d ", i, game->players[i].client_pid);
+    }
+
+
 }
 
 void *redraw_map_thread(void *data) {

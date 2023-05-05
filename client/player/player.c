@@ -22,10 +22,13 @@ int send_create_player_request(Game * game){
         return -1;
     }
 
-    int id = game->number_of_players;
-    if(id >= MAX_PLAYERS){
+    int id = find_free_spot(game);
+    mvprintw(11, 0, " Player Id: %d", id);
+    refresh();
+    if(id < 0 || game->number_of_players >= MAX_PLAYERS){
         return -2;
     }
+
     game->players[id].isAssigned = true;
     game->players[id].client_pid = getpid();
 
@@ -97,6 +100,7 @@ void draw_fov_map(Player *player) {
 typedef struct GameAndPlayer {
     Game *game;
     Player *player;
+    bool stop_draw;
 } GameAndPlayer;
 
 
@@ -107,6 +111,10 @@ void *redraw_map_thread_client(void *data) {
     while (true) {
         if (sem_wait(&game->sem_draw) == -1) {
             perror("sem_wait");
+            break;
+        }
+        if(game_and_player->stop_draw){
+            clear();
             break;
         }
         draw_fov_map(player);
@@ -172,6 +180,7 @@ void run_client() {
     }
     game_and_player.game = shared_game_memory;
     game_and_player.player = &shared_game_memory->players[player_id];
+    game_and_player.stop_draw = false;
 
     // Release the semaphore
     if (sem_post(&shared_game_memory->sem) == -1) {
@@ -188,6 +197,7 @@ void run_client() {
     while (true) { // Exit the loop when the 'q' key is pressed
         ch = getch();
         if (ch == 'q') {
+            game_and_player.stop_draw = true;
             break;
         }
 
@@ -199,7 +209,7 @@ void run_client() {
 
         // Check if the server process is still running
         if (shared_game_memory->server_pid != 0 && kill(shared_game_memory->server_pid, 0) == 0) {
-            if(shared_game_memory->number_of_players >= MAX_PLAYERS){
+            if(shared_game_memory->number_of_players > MAX_PLAYERS){
                 mvprintw(1, 0, "SERVER IS FULL");
                 refresh();
                 break;

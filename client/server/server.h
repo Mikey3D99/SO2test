@@ -27,7 +27,7 @@ bool is_player_obstructed_by_wall_and_in_range(int player_x, int player_y, int b
 void init_players(Game* game);
 int initialize_beasts(Game * game);
 Point* bresenham(int x1, int y1, int x2, int y2, int *num_points);
-Player * find_free_spot(Game * game);
+int find_free_spot(Game * game);
 Player * add_player(int id, Game * game);
 int update_map(Game * game);
 Game* connect_to_shared_memory(int* shmid);

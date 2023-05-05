@@ -10,7 +10,7 @@
 
 #define MAP_WIDTH 50
 #define MAP_HEIGHT 21
-#define MAX_PLAYERS 4
+#define MAX_PLAYERS 1
 #define SHM_KEY 1249
 #define SHM_SIZE 2048
 #define READY 1
