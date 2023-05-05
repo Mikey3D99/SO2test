@@ -23,6 +23,9 @@ int send_create_player_request(Game * game){
     }
 
     int id = game->number_of_players;
+    if(id >= MAX_PLAYERS){
+        return -2;
+    }
     game->players[id].isAssigned = true;
     game->players[id].client_pid = getpid();
 
@@ -106,9 +109,10 @@ void *redraw_map_thread_client(void *data) {
             perror("sem_wait");
             break;
         }
+        draw_fov_map(player);
         //update_map(game);
         //update_fov(game);
-        draw_fov_map(player);
+
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
             break;
@@ -140,15 +144,23 @@ void run_client() {
         mvprintw(1, 0, "SHARED MEMORY HAS NOT BEEN CREATED YET");
         mvprintw(2, 0, "SERVER NOT RUNNING");
         refresh();
+        endwin();
         return;
     }
 
     ///Send create player request
     int player_id = send_create_player_request(shared_game_memory);
-    if(player_id < 0){
+    if(player_id == -1){
         mvprintw(1, 0, "Error creating a player.");
         refresh();
+        endwin();
         return;    }
+    else if(player_id == -2){
+        mvprintw(1, 0, "SERVER IS FULL");
+        refresh();
+        //endwin(); // this caused the message to not display
+        return;
+    }
 
     GameAndPlayer game_and_player;
 
@@ -187,8 +199,15 @@ void run_client() {
 
         // Check if the server process is still running
         if (shared_game_memory->server_pid != 0 && kill(shared_game_memory->server_pid, 0) == 0) {
-            if (&shared_game_memory->players[player_id] != NULL) {
-                move_player(ch, &shared_game_memory->players[player_id]);
+            if(shared_game_memory->number_of_players >= MAX_PLAYERS){
+                mvprintw(1, 0, "SERVER IS FULL");
+                refresh();
+                break;
+            }
+            else{
+                if (&shared_game_memory->players[player_id] != NULL) {
+                    move_player(ch, &shared_game_memory->players[player_id]);
+                }
             }
         } else {
             mvprintw(1, 0, "SERVER NOT RUNNING");
