@@ -162,10 +162,16 @@ void run_client() {
         mvprintw(1, 0, "Error creating a player.");
         refresh();
         endwin();
+        if (shmdt(shared_game_memory) == -1) {
+            perror("shmdt");
+        }
         return;    }
     else if(player_id == -2){
         mvprintw(1, 0, "SERVER IS FULL");
         refresh();
+        if (shmdt(shared_game_memory) == -1) {
+            perror("shmdt");
+        }
         //endwin(); // this caused the message to not display
         return;
     }
@@ -175,6 +181,9 @@ void run_client() {
 
    ///ACCESSING SHARED MEMORY
     if (sem_wait(&shared_game_memory->sem) == -1) {
+        if (shmdt(shared_game_memory) == -1) {
+            perror("shmdt");
+        }
         perror("sem_wait");
         return;
     }
@@ -184,6 +193,9 @@ void run_client() {
 
     // Release the semaphore
     if (sem_post(&shared_game_memory->sem) == -1) {
+        if (shmdt(shared_game_memory) == -1) {
+            perror("shmdt");
+        }
         perror("sem_post");
         return;
     }
@@ -232,7 +244,11 @@ void run_client() {
     }
 
     // Clean up and exit
-    pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
+
+    if (shmdt(shared_game_memory) == -1) {
+        perror("shmdt");
+    }
+
     endwin();
 }

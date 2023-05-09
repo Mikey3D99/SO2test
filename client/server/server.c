@@ -586,6 +586,11 @@ void listen_to_client_connections(Game* game) {
             }
         }
         if(game->server_status == GAME_END){
+            // Release the semaphore
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                break;
+            }
             break;
         }
         // Release the semaphore
@@ -594,7 +599,8 @@ void listen_to_client_connections(Game* game) {
             break;
         }
     }
-    printf("\nCLIENT CONNECTION LISTENER CLOSED\n");
+
+    mvprintw(MAP_HEIGHT + 11, 0, "CLIENT LISTENER THREAD CLOSED");
 }
 
 int find_free_spot(Game * game){
@@ -727,6 +733,11 @@ void *beast_behavior_thread(void *data) {
         beast_follow_player(find_closest_player_id(game), game);
 
         if(game->server_status == GAME_END){
+            if (sem_post(&game->sem) == -1) {
+                perror("sem_post");
+                pthread_mutex_unlock(&game->mutex);
+                break;
+            }
             break;
         }
 
@@ -741,7 +752,7 @@ void *beast_behavior_thread(void *data) {
             break;
         }
     }
-    printf("\nBEAST BEHAVIOR THREAD CLOSED\n");
+    mvprintw(MAP_HEIGHT + 10, 0, "BEAST BEHAVIOR THREAD CLOSED");
     return NULL;
 }
 
@@ -783,8 +794,12 @@ void *redraw_map_thread(void *data) {
         draw_map(game);
 
         if(game->server_status == GAME_END){
+            if (sem_post(&game->sem_draw) == -1) {
+                perror("sem_post");
+                break;
+            }
             refresh();
-            return NULL;
+            break;
         }
         if (sem_post(&game->sem_draw) == -1) {
             perror("sem_post");
@@ -794,7 +809,7 @@ void *redraw_map_thread(void *data) {
         //erase();
         refresh();// Redraw every 100ms, adjust this value as needed
     }
-    printf("\nREDRAW THREAD CLOSED\n");
+    mvprintw(MAP_HEIGHT + 8, 0, "REDRAW THREAD CLOSED");
     return NULL;
 }
 
@@ -847,7 +862,7 @@ void *keyboard_listener(void *arg) {
             }
         }
     }
-    printf("\nKEYBOARD LISTENER CLOSED\n");
+    mvprintw(MAP_HEIGHT + 9, 0, "KEYBOARD LISTENER CLOSED");
     return NULL;
 }
 
@@ -1026,6 +1041,7 @@ int run_server() {
         }
 
         if (game->server_status == GAME_END) {
+            pthread_cond_signal(&game->beast_cond);
             if (pthread_mutex_unlock(&game->mutex) != 0) {
                 perror("pthread_mutex_unlock");
                 break;
@@ -1080,24 +1096,12 @@ int run_server() {
     }
 
     // Before exiting the server
-    clear();
     mvprintw(MAP_HEIGHT + 7, 0, "GAME ENDED QUITING...");
     refresh();
 
-    //cancel keyboard listener
-    pthread_cancel(keyboard_listener_thread);
     pthread_join(keyboard_listener_thread, NULL);
-
-    //cancel beast thread
-    pthread_cancel(beast_thread);
     pthread_join(beast_thread, NULL);
-
-    //cancel redraw thread
-    pthread_cancel(redraw_thread);
     pthread_join(redraw_thread, NULL);
-
-    //cancel client listener
-    pthread_cancel(client_requests_thread);
     pthread_join(client_requests_thread, NULL);
 
 
